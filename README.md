@@ -40,6 +40,18 @@ Change any of the settings later with the integration's **Configure** button. Ad
 - Your ScaleEV password is stored in Home Assistant's config-entry storage, like other integrations' credentials.
 - If your password changes, Home Assistant will ask you to re-enter it.
 
+## Contributing and releases
+Open a pull request; don't push to `main`. PR titles must be [conventional commits](https://www.conventionalcommits.org/) and PRs are squash-merged, because the title decides the next version:
+
+| Title | Release |
+| --- | --- |
+| `fix: ...` | patch (0.1.0 -> 0.1.1) |
+| `feat: ...` | minor (0.1.0 -> 0.2.0) |
+| `feat!: ...` or a `BREAKING CHANGE:` footer | minor while below 1.0, major after |
+| `docs:`, `test:`, `ci:`, `chore:`, `refactor:` | no release |
+
+After releasable changes land on `main`, a bot opens a **release PR** that bumps `manifest.json` and `CHANGELOG.md`. Merging it creates the tag and GitHub release that HACS installs.
+
 ## Development
 ```bash
 pip install -r requirements_test.txt
