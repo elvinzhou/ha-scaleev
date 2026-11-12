@@ -1,42 +1,44 @@
 name: Release
-# Creates a GitHub release (and its tag) for HACS. Run it from the Actions tab:
-# Actions -> Release -> Run workflow -> enter the version (e.g. 0.1.0).
-# Pushing a tag like v0.1.0 also works.
+# On every merge to main, release automatically if the commits since the last tag
+# contain a releasable conventional-commit title (fix/perf -> patch, feat -> minor,
+# feat! -> breaking). No version-bump commit or PR: the version is written into the
+# release zip that HACS installs (see hacs.json).
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version without the leading v (must match manifest.json)"
-        required: true
   push:
-    tags: ["v*"]
+    branches: [main]
 permissions:
   contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Work out the version and check it matches manifest.json
+        with:
+          fetch-depth: 0
+      - name: Work out the next version
         id: v
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-          VERSION="${VERSION#v}"
-          MANIFEST=$(python3 -c "import json;print(json.load(open('custom_components/scaleev/manifest.json'))['version'])")
-          if [ "$VERSION" != "$MANIFEST" ]; then
-            echo "::error::Version $VERSION does not match manifest.json ($MANIFEST)"; exit 1
-          fi
+          LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          VERSION=$(python3 .github/scripts/next_version.py "$LAST")
+          echo "last=$LAST version=$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - name: Create the release
+      - name: Build the release zip
+        if: steps.v.outputs.version != ''
+        run: |
+          python3 - <<PY
+          import json
+          p = "custom_components/scaleev/manifest.json"
+          m = json.load(open(p)); m["version"] = "${{ steps.v.outputs.version }}"
+          json.dump(m, open(p, "w"), indent=2)
+          PY
+          cd custom_components/scaleev && zip -qr ../../scaleev.zip . -x '__pycache__/*'
+      - name: Publish the release
+        if: steps.v.outputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v${{ steps.v.outputs.version }}"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists"; exit 0
-          fi
-          gh release create "$TAG" --target "${{ github.sha }}" --title "$TAG" --generate-notes
+          gh release create "v${{ steps.v.outputs.version }}" scaleev.zip \
+            --target "${{ github.sha }}" --title "v${{ steps.v.outputs.version }}" --generate-notes
