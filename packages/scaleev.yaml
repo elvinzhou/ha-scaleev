@@ -7,6 +7,8 @@ rest_command:
     url: "{{ api }}/drivers/auth/login"
     method: post
     content_type: "application/json"
+    headers:
+      ngrok-skip-browser-warning: "true"
     payload: '{{ {"email": email, "password": password, "tenantSlug": tenant} | tojson }}'
 
   scaleev_remote_start:
@@ -15,6 +17,7 @@ rest_command:
     content_type: "application/json"
     headers:
       authorization: "Bearer {{ token }}"
+      ngrok-skip-browser-warning: "true"
     payload: '{{ {"connectorId": connector_id | int, "priceFlowType": "kwh", "targetKwh": target_kwh | float} | tojson }}'
 
   scaleev_live:
@@ -22,6 +25,7 @@ rest_command:
     method: get
     headers:
       authorization: "Bearer {{ token }}"
+      ngrok-skip-browser-warning: "true"
 
 script:
   scaleev_start_charging:
