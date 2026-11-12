@@ -50,7 +50,7 @@ Open a pull request; don't push to `main`. PR titles must be [conventional commi
 | `feat!: ...` or a `BREAKING CHANGE:` footer | minor while below 1.0, major after |
 | `docs:`, `test:`, `ci:`, `chore:`, `refactor:` | no release |
 
-After releasable changes land on `main`, a bot opens a **release PR** that bumps `manifest.json` and `CHANGELOG.md`. Merging it creates the tag and GitHub release that HACS installs.
+On merge to `main`, a workflow looks at the commits since the last tag and, if any are releasable, publishes the next version as a GitHub release (tag, generated notes and a `scaleev.zip` that HACS installs). There is no version-bump commit or PR; the version is written into the zip.
 
 ## Development
 ```bash

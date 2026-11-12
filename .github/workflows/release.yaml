@@ -1,0 +1,44 @@
+name: Release
+# On every merge to main, release automatically if the commits since the last tag
+# contain a releasable conventional-commit title (fix/perf -> patch, feat -> minor,
+# feat! -> breaking). No version-bump commit or PR: the version is written into the
+# release zip that HACS installs (see hacs.json).
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Work out the next version
+        id: v
+        run: |
+          LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          VERSION=$(python3 .github/scripts/next_version.py "$LAST")
+          echo "last=$LAST version=$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build the release zip
+        if: steps.v.outputs.version != ''
+        run: |
+          python3 - <<PY
+          import json
+          p = "custom_components/scaleev/manifest.json"
+          m = json.load(open(p)); m["version"] = "${{ steps.v.outputs.version }}"
+          json.dump(m, open(p, "w"), indent=2)
+          PY
+          cd custom_components/scaleev && zip -qr ../../scaleev.zip . -x '__pycache__/*'
+      - name: Publish the release
+        if: steps.v.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.v.outputs.version }}" scaleev.zip \
+            --target "${{ github.sha }}" --title "v${{ steps.v.outputs.version }}" --generate-notes
