@@ -13,16 +13,16 @@ STATIONS = [
     {"id": "station-2", "name": "CDN08", "type": "AC", "maxPower": 6.7, "status": "Available",
      "connectors": [{"connectorId": 1, "type": "J1772", "maxPower": 6.7, "status": "Available"}]},
 ]
-LOCATIONS = [{"id": "loc-1", "name": "Cadence", "address": "28850 Dixon St"}]
+LOCATIONS = [{"id": "loc-1", "name": "Cadence", "address": "28850 Dixon St", "latitude": 37.634166, "longitude": -122.054248}]
 LIVE_AUTH = {"id": "sess-1", "status": "in-progress", "paymentStatus": "authorized", "energyDeliveredKwh": 1.5,
              "totalCost": 0.9, "currency": "USD"}
 
 
-def mock_api(mock, *, start=None, live_session=None, live_current=None):
+def mock_api(mock, *, start=None, live_session=None, live_current=None, locations=None):
     """Register the ScaleEV API on an aioclient_mock."""
     mock.get(f"{API}/public/tenants/demo/config", json={"success": True, "data": {"slug": "demo-net", "appName": "Demo Net"}})
     mock.post(f"{API}/drivers/auth/login", json=LOGIN)
-    mock.get(f"{API}/drivers/locations", json={"success": True, "data": LOCATIONS})
+    mock.get(f"{API}/drivers/locations", json={"success": True, "data": locations or LOCATIONS})
     mock.get(f"{API}/drivers/locations/loc-1/stations", json={"success": True, "data": STATIONS})
     mock.get(f"{API}/drivers/stations/{STATION}", json={"success": True, "data": STATIONS[0]})
     if start is not None:
@@ -32,27 +32,29 @@ def mock_api(mock, *, start=None, live_session=None, live_current=None):
     mock.get(f"{API}/drivers/charging/live", json={"success": True, "data": live_current})
 
 
-def make_entry(hass, **option_overrides):
+def make_entry(hass, *, coordinates=True, **option_overrides):
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id=f"drv_{STATION}",
         title="CDN31 (Cadence)",
         data={"api_base": API, "tenant_slug": "demo-net", "email": "a@b.c", "password": "pw",
               "driver_id": "drv", "location_id": "loc-1", "location_name": "Cadence",
-              "station_id": STATION, "station_name": "CDN31", "connector_id": 1},
+              "station_id": STATION, "station_name": "CDN31", "connector_id": 1,
+              "location_latitude": hass.config.latitude if coordinates else None,
+              "location_longitude": hass.config.longitude if coordinates else None},
         options={"target_kwh": 60, "cable_sensor": "binary_sensor.car_cable",
-                 "vehicle_tracker": "device_tracker.car", "charge_zone": "zone.home",
+                 "vehicle_tracker": "device_tracker.car", "radius": 150,
                  "notify_service": "notify.mobile_app_pat", "pay_timeout": 1, **option_overrides},
     )
     entry.add_to_hass(hass)
     return entry
 
 
-def set_world(hass, *, at_home=True):
+def set_world(hass, *, at_home=True, gps=True):
     lat, lon = hass.config.latitude, hass.config.longitude
     hass.states.async_set("zone.home", "0", {"latitude": lat, "longitude": lon, "radius": 100, "passive": False, "friendly_name": "Home"})
-    hass.states.async_set("device_tracker.car", "home" if at_home else "not_home",
-                          {"latitude": lat if at_home else lat + 1, "longitude": lon, "gps_accuracy": 5})
+    attrs = {"latitude": lat if at_home else lat + 1, "longitude": lon, "gps_accuracy": 5} if gps else {}
+    hass.states.async_set("device_tracker.car", "home" if at_home else "not_home", attrs)
     hass.states.async_set("binary_sensor.car_cable", "off")
 
 

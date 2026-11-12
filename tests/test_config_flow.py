@@ -26,9 +26,11 @@ async def test_full_flow(hass, aioclient_mock):
     assert r["step_id"] == "settings"
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {
         "target_kwh": 60, "cable_sensor": "binary_sensor.car_cable", "vehicle_tracker": "device_tracker.car",
-        "charge_zone": "zone.home", "notify_service": "notify.mobile_app_pat", "pay_timeout": 10})
+        "radius": 200, "notify_service": "notify.mobile_app_pat", "pay_timeout": 10})
     assert r["type"] is FlowResultType.CREATE_ENTRY
     assert r["title"] == "CDN31 (Cadence)"
+    assert r["data"]["location_latitude"] == 37.634166 and r["data"]["location_longitude"] == -122.054248
+    assert r["options"]["radius"] == 200 and "charge_zone" not in r["options"]
     assert r["data"]["tenant_slug"] == "demo-net" and r["data"]["station_id"] == STATION
     assert r["data"]["connector_id"] == 1
     assert r["options"]["target_kwh"] == 60
@@ -76,10 +78,11 @@ async def test_options_flow(hass, aioclient_mock):
     assert r["step_id"] == "init"
     r = await hass.config_entries.options.async_configure(r["flow_id"], {
         "target_kwh": 75, "cable_sensor": "binary_sensor.car_cable", "vehicle_tracker": "device_tracker.car",
-        "charge_zone": "zone.home", "notify_service": "notify.mobile_app_pat", "pay_timeout": 5})
+        "radius": 300, "charge_zone": "zone.home", "notify_service": "notify.mobile_app_pat", "pay_timeout": 5})
     assert r["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
-    assert entry.options["target_kwh"] == 75
+    assert entry.options["target_kwh"] == 75 and entry.options["charge_zone"] == "zone.home"
+    assert entry.options["radius"] == 300
 
 
 async def test_reauth(hass, aioclient_mock):
@@ -90,3 +93,18 @@ async def test_reauth(hass, aioclient_mock):
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {"password": "new"})
     assert r["type"] is FlowResultType.ABORT and r["reason"] == "reauth_successful"
     assert entry.data["password"] == "new"
+
+
+async def test_zone_required_without_coordinates(hass, aioclient_mock):
+    mock_api(aioclient_mock, locations=[{"id": "loc-1", "name": "Cadence"}])
+    async_mock_service(hass, "notify", "mobile_app_pat")
+    r = await _start(hass)
+    r = await hass.config_entries.flow.async_configure(r["flow_id"], {"link": "https://demo.scaleev.scaletech.xyz", "api_base": API})
+    r = await hass.config_entries.flow.async_configure(r["flow_id"], {"email": "a@b.c", "password": "pw"})
+    r = await hass.config_entries.flow.async_configure(r["flow_id"], {"station_id": STATION})
+    base = {"target_kwh": 60, "cable_sensor": "binary_sensor.car_cable", "vehicle_tracker": "device_tracker.car",
+            "radius": 150, "notify_service": "notify.mobile_app_pat", "pay_timeout": 10}
+    r = await hass.config_entries.flow.async_configure(r["flow_id"], base)
+    assert r["errors"] == {"charge_zone": "zone_required"}
+    r = await hass.config_entries.flow.async_configure(r["flow_id"], {**base, "charge_zone": "zone.home"})
+    assert r["type"] is FlowResultType.CREATE_ENTRY and r["data"]["location_latitude"] is None

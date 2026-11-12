@@ -34,16 +34,20 @@ from .const import (
     CONF_EMAIL,
     CONF_LINK,
     CONF_LOCATION_ID,
+    CONF_LOCATION_LAT,
+    CONF_LOCATION_LON,
     CONF_LOCATION_NAME,
     CONF_NOTIFY_SERVICE,
     CONF_PASSWORD,
     CONF_PAY_TIMEOUT,
+    CONF_RADIUS,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     CONF_TARGET_KWH,
     CONF_TENANT_SLUG,
     CONF_VEHICLE_TRACKER,
     DEFAULT_PAY_TIMEOUT,
+    DEFAULT_RADIUS,
     DOMAIN,
 )
 
@@ -61,7 +65,10 @@ def _settings_schema(hass) -> vol.Schema:
             ),
             vol.Required(CONF_CABLE_SENSOR): EntitySelector(EntitySelectorConfig(domain="binary_sensor")),
             vol.Required(CONF_VEHICLE_TRACKER): EntitySelector(EntitySelectorConfig(domain="device_tracker")),
-            vol.Required(CONF_CHARGE_ZONE, default="zone.home"): EntitySelector(EntitySelectorConfig(domain="zone")),
+            vol.Required(CONF_RADIUS, default=DEFAULT_RADIUS): NumberSelector(
+                NumberSelectorConfig(min=25, max=2000, step=25, unit_of_measurement="m", mode=NumberSelectorMode.BOX)
+            ),
+            vol.Optional(CONF_CHARGE_ZONE): EntitySelector(EntitySelectorConfig(domain="zone")),
             vol.Required(CONF_NOTIFY_SERVICE): SelectSelector(
                 SelectSelectorConfig(options=services, custom_value=True, mode=SelectSelectorMode.DROPDOWN)
             ),
@@ -73,7 +80,18 @@ def _settings_schema(hass) -> vol.Schema:
 
 
 def _options(user_input: dict[str, Any]) -> dict[str, Any]:
-    return {**user_input, CONF_PAY_TIMEOUT: float(user_input[CONF_PAY_TIMEOUT])}
+    return {
+        **user_input,
+        CONF_PAY_TIMEOUT: float(user_input[CONF_PAY_TIMEOUT]),
+        CONF_RADIUS: float(user_input[CONF_RADIUS]),
+    }
+
+
+def _settings_errors(user_input: dict[str, Any], has_coordinates: bool) -> dict[str, str]:
+    """A zone is required when ScaleEV gave us no coordinates for the location."""
+    if not has_coordinates and not user_input.get(CONF_CHARGE_ZONE):
+        return {CONF_CHARGE_ZONE: "zone_required"}
+    return {}
 
 
 class ScaleEVConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -225,7 +243,11 @@ class ScaleEVConfigFlow(ConfigFlow, domain=DOMAIN):
 
     # -- 5. settings -------------------------------------------------------
     async def async_step_settings(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        has_coordinates = self._location.get("latitude") is not None and self._location.get("longitude") is not None
         if user_input is not None:
+            errors = _settings_errors(user_input, has_coordinates)
+        if user_input is not None and not errors:
             return self.async_create_entry(
                 title=f"{self._station['name']} ({self._location['name']})",
                 data={
@@ -236,13 +258,21 @@ class ScaleEVConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_DRIVER_ID: self._driver_id,
                     CONF_LOCATION_ID: self._location["id"],
                     CONF_LOCATION_NAME: self._location["name"],
+                    CONF_LOCATION_LAT: self._location.get("latitude"),
+                    CONF_LOCATION_LON: self._location.get("longitude"),
                     CONF_STATION_ID: self._station["id"],
                     CONF_STATION_NAME: self._station["name"],
                     CONF_CONNECTOR_ID: self._connector_id,
                 },
                 options=_options(user_input),
             )
-        return self.async_show_form(step_id="settings", data_schema=_settings_schema(self.hass))
+        schema = _settings_schema(self.hass)
+        if user_input is not None:
+            schema = self.add_suggested_values_to_schema(schema, user_input)
+        return self.async_show_form(
+            step_id="settings", data_schema=schema, errors=errors,
+            description_placeholders={"location": self._location["name"]},
+        )
 
     # -- reauth ------------------------------------------------------------
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
@@ -279,7 +309,13 @@ class ScaleEVOptionsFlow(OptionsFlow):
     """Edit target energy, entities, notify action and payment timeout."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        data = self.config_entry.data
+        has_coordinates = data.get(CONF_LOCATION_LAT) is not None and data.get(CONF_LOCATION_LON) is not None
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=_options(user_input))
-        schema = self.add_suggested_values_to_schema(_settings_schema(self.hass), self.config_entry.options)
-        return self.async_show_form(step_id="init", data_schema=schema)
+            errors = _settings_errors(user_input, has_coordinates)
+            if not errors:
+                return self.async_create_entry(data=_options(user_input))
+        current = user_input if user_input is not None else self.config_entry.options
+        schema = self.add_suggested_values_to_schema(_settings_schema(self.hass), current)
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

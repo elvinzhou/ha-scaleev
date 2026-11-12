@@ -15,6 +15,7 @@ from homeassistant.const import (
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util.location import distance
 
 from .api import ScaleEVClient
 from .charging import ChargeManager
@@ -23,7 +24,11 @@ from .const import (
     CONF_CABLE_SENSOR,
     CONF_CHARGE_ZONE,
     CONF_EMAIL,
+    CONF_LOCATION_LAT,
+    CONF_LOCATION_LON,
     CONF_PASSWORD,
+    CONF_RADIUS,
+    DEFAULT_RADIUS,
     CONF_TENANT_SLUG,
     CONF_VEHICLE_TRACKER,
 )
@@ -49,6 +54,27 @@ def _vehicle_in_zone(hass: HomeAssistant, tracker_id: str, zone_id: str) -> bool
     return tracker.state.lower() == name or (zone_id == "zone.home" and tracker.state == "home")
 
 
+def _vehicle_at_charger(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """True if the vehicle is in the chosen zone, or near the location's coordinates."""
+    opts = entry.options
+    tracker_id = opts[CONF_VEHICLE_TRACKER]
+    if zone_id := opts.get(CONF_CHARGE_ZONE):
+        return _vehicle_in_zone(hass, tracker_id, zone_id)
+    tracker = hass.states.get(tracker_id)
+    lat = entry.data.get(CONF_LOCATION_LAT)
+    lon = entry.data.get(CONF_LOCATION_LON)
+    if tracker is None or lat is None or lon is None:
+        return False
+    t_lat = tracker.attributes.get(ATTR_LATITUDE)
+    t_lon = tracker.attributes.get(ATTR_LONGITUDE)
+    if t_lat is None or t_lon is None:
+        _LOGGER.debug("%s has no GPS position; choose a zone in the options instead", tracker_id)
+        return False
+    metres = distance(t_lat, t_lon, lat, lon)
+    accuracy = tracker.attributes.get(ATTR_GPS_ACCURACY) or 0
+    return metres is not None and metres - accuracy < opts.get(CONF_RADIUS, DEFAULT_RADIUS)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> bool:
     client = ScaleEVClient(
         async_get_clientsession(hass),
@@ -70,9 +96,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
             return
         if not manager.auto_start:
             return
-        opts = entry.options
-        if not _vehicle_in_zone(hass, opts[CONF_VEHICLE_TRACKER], opts[CONF_CHARGE_ZONE]):
-            _LOGGER.debug("Cable connected outside the charging zone, ignoring")
+        if not _vehicle_at_charger(hass, entry):
+            _LOGGER.debug("Cable connected away from the charging location, ignoring")
             return
         manager.async_trigger(manual=False)
 

@@ -4,47 +4,63 @@
       "user": {
         "title": "Connect to your charging network",
         "description": "Paste any link from your charging network's web app (for example https://yournetwork.scaleev.scaletech.xyz/map).",
-        "data": {"link": "Link", "api_base": "API base URL (only if setup can't work it out)"}
+        "data": {
+          "link": "Link",
+          "api_base": "API base URL (only if setup can't work it out)"
+        }
       },
       "login": {
         "title": "Log in to {network}",
-        "data": {"email": "Email", "password": "Password"}
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
       },
       "location": {
         "title": "Choose a location",
-        "data": {"location_id": "Location"}
+        "data": {
+          "location_id": "Location"
+        }
       },
       "station": {
         "title": "Choose a charging station",
-        "data": {"station_id": "Station"}
+        "data": {
+          "station_id": "Station"
+        }
       },
       "connector": {
         "title": "Choose a connector",
-        "data": {"connector_id": "Connector"}
+        "data": {
+          "connector_id": "Connector"
+        }
       },
       "settings": {
         "title": "Charging settings",
-        "description": "Set the target energy to your vehicle's usable battery capacity so the session isn't cut short. Charging starts when the cable sensor turns on while the vehicle is inside the zone.",
+        "description": "Set the target energy to your vehicle's usable battery capacity so the session isn't cut short. Charging starts when the cable sensor turns on while the vehicle is within the radius of {location}. Pick a zone only if you want to define the area yourself, or if your tracker has no GPS position.",
         "data": {
           "target_kwh": "Target energy",
           "cable_sensor": "Charge cable connected sensor",
           "vehicle_tracker": "Vehicle location tracker",
-          "charge_zone": "Charging location (zone)",
+          "charge_zone": "Charging zone (optional override)",
           "notify_service": "Notify action",
-          "pay_timeout": "Payment timeout"
+          "pay_timeout": "Payment timeout",
+          "radius": "Radius around the location"
         }
       },
       "reauth_confirm": {
         "title": "Re-enter your password",
         "description": "ScaleEV rejected the saved password for {email}.",
-        "data": {"password": "Password"}
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
       "invalid_link": "That doesn't look like a link.",
       "api_base_required": "This network's API address couldn't be guessed, please enter it.",
       "cannot_connect": "Could not reach ScaleEV or find that network.",
-      "invalid_auth": "Email or password rejected."
+      "invalid_auth": "Email or password rejected.",
+      "zone_required": "ScaleEV has no coordinates for this location, so choose a zone."
     },
     "abort": {
       "already_configured": "This station is already set up for this account.",
@@ -63,21 +79,42 @@
           "target_kwh": "Target energy",
           "cable_sensor": "Charge cable connected sensor",
           "vehicle_tracker": "Vehicle location tracker",
-          "charge_zone": "Charging location (zone)",
+          "charge_zone": "Charging zone (optional override)",
           "notify_service": "Notify action",
-          "pay_timeout": "Payment timeout"
-        }
+          "pay_timeout": "Payment timeout",
+          "radius": "Radius around the location"
+        },
+        "description": "Set the target energy to your vehicle's usable battery capacity so the session isn't cut short. Charging starts when the cable sensor turns on while the vehicle is within the radius of the charging location. Pick a zone only if you want to define the area yourself, or if your tracker has no GPS position."
       }
+    },
+    "error": {
+      "zone_required": "ScaleEV has no coordinates for this location, so choose a zone."
     }
   },
   "entity": {
-    "button": {"start_charging": {"name": "Start charging"}},
-    "switch": {"auto_start": {"name": "Auto-start on plug-in"}},
+    "button": {
+      "start_charging": {
+        "name": "Start charging"
+      }
+    },
+    "switch": {
+      "auto_start": {
+        "name": "Auto-start on plug-in"
+      }
+    },
     "sensor": {
-      "connector_status": {"name": "Connector status"},
-      "session_status": {"name": "Session status"},
-      "session_energy": {"name": "Session energy"},
-      "session_cost": {"name": "Session cost"}
+      "connector_status": {
+        "name": "Connector status"
+      },
+      "session_status": {
+        "name": "Session status"
+      },
+      "session_energy": {
+        "name": "Session energy"
+      },
+      "session_cost": {
+        "name": "Session cost"
+      }
     }
   }
 }

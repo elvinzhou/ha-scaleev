@@ -15,7 +15,7 @@ def _fast_polls():
 
 async def _setup(hass, mock, **kw):
     notify = async_mock_service(hass, "notify", "mobile_app_pat")
-    set_world(hass, at_home=kw.pop("at_home", True))
+    set_world(hass, at_home=kw.pop("at_home", True), gps=kw.pop("gps", True))
     entry = make_entry(hass, **kw)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -76,6 +76,52 @@ async def test_outside_zone_does_nothing(hass, aioclient_mock):
     await _plug_in(hass, entry)
     assert not notify
     assert not [c for c in aioclient_mock.mock_calls if "remote-start" in str(c[1])]
+
+
+async def test_zone_override_is_used_instead_of_location(hass, aioclient_mock):
+    """Location coordinates are far away, but the chosen zone contains the car."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    notify = async_mock_service(hass, "notify", "mobile_app_pat")
+    set_world(hass)
+    entry = make_entry(hass, charge_zone="zone.home")
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "location_latitude": 0.0, "location_longitude": 0.0})
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _plug_in(hass, entry)
+    assert notify[0].data["title"] == "ScaleEV: payment needed"
+
+
+async def test_far_from_location_does_nothing(hass, aioclient_mock):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, radius=25)
+    hass.states.async_set("device_tracker.car", "not_home",
+                          {"latitude": hass.config.latitude + 0.01, "longitude": hass.config.longitude, "gps_accuracy": 5})
+    await _plug_in(hass, entry)
+    assert not notify
+
+
+async def test_radius_boundary(hass, aioclient_mock):
+    """~111 m away is inside a 150 m radius but outside a 50 m one."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, radius=50)
+    hass.states.async_set("device_tracker.car", "not_home",
+                          {"latitude": hass.config.latitude + 0.001, "longitude": hass.config.longitude, "gps_accuracy": 0})
+    await _plug_in(hass, entry)
+    assert not notify
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "radius": 150})
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.car_cable", "off")
+    await hass.async_block_till_done()
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    await _plug_in(hass, entry)
+    assert notify and notify[0].data["title"] == "ScaleEV: payment needed"
+
+
+async def test_no_gps_and_no_zone_does_nothing(hass, aioclient_mock):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, gps=False)
+    await _plug_in(hass, entry)
+    assert not notify
 
 
 async def test_auto_start_switch_off(hass, aioclient_mock):

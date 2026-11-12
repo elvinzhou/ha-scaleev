@@ -5,7 +5,7 @@ Start a [ScaleEV](https://scaletech.xyz)-powered charging session automatically 
 > Unofficial. Built on the web app's HTTP API, which may change without notice. Not affiliated with ScaleEV or any charging network.
 
 ## What it does
-1. Your vehicle's **charge cable connected** sensor turns on while the vehicle is **inside your chosen zone**.
+1. Your vehicle's **charge cable connected** sensor turns on while the vehicle is **near the charging location**. ScaleEV provides the location's coordinates, so no zone is needed; the default radius is 150 m.
 2. The integration logs in, requests a remote start for your chosen station and connector, and targets the energy you configured.
 3. **First session only:** ScaleEV returns a Stripe checkout link. You get a notification with a **Pay now** button, and the integration waits (default 10 minutes) for the payment hold to be authorized.
 4. You get a notification when charging starts, or when it fails or times out.
@@ -20,9 +20,11 @@ Settings → Devices & services → **Add integration** → **ScaleEV**, then:
 1. **Link:** paste any link from your charging network's web app (for example `https://yournetwork.scaleev.scaletech.xyz/map`). If the API address can't be worked out from the link, enter it in the optional field.
 2. **Log in** with your ScaleEV account.
 3. **Pick** the location, station and connector from lists.
-4. **Settings:** target energy, cable sensor, vehicle tracker, charging zone, notify action and payment timeout. Set the target to your vehicle's **usable battery capacity** so the session isn't cut short.
+4. **Settings:** target energy, cable sensor, vehicle tracker, radius, notify action and payment timeout. A zone is optional. Set the target to your vehicle's **usable battery capacity** so the session isn't cut short.
 
 Change any of the settings later with the integration's **Configure** button. Add the integration again for a second station or vehicle.
+
+**Zone override:** if you'd rather define the area yourself, or your vehicle tracker has no GPS position (for example a router-based tracker), pick a zone in the settings. A chosen zone is used instead of the location's coordinates. If ScaleEV doesn't provide coordinates for a location, a zone is required.
 
 ## Entities
 | Entity | What it is |
