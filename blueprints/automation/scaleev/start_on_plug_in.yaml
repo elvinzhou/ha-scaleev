@@ -1,0 +1,80 @@
+blueprint:
+  name: ScaleEV - start charging on plug-in
+  description: >-
+    Starts a ScaleEV charging session when your vehicle's charge cable is
+    connected while the vehicle is inside a chosen zone. Requires the
+    `scaleev_start_charging` script from `packages/scaleev.yaml`.
+  domain: automation
+  input:
+    cable_sensor:
+      name: Charge cable connected sensor
+      selector:
+        entity:
+          domain: binary_sensor
+    vehicle_tracker:
+      name: Vehicle location
+      selector:
+        entity:
+          domain: device_tracker
+    charge_zone:
+      name: Charging location (zone)
+      selector:
+        entity:
+          domain: zone
+    target_kwh:
+      name: Target energy (kWh)
+      description: Recommended - your vehicle's usable battery capacity.
+      selector:
+        number:
+          min: 1
+          max: 250
+          step: 0.5
+          unit_of_measurement: kWh
+          mode: box
+    station_id:
+      name: ScaleEV station ID
+      selector:
+        text:
+    connector_id:
+      name: Connector ID
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 10
+          mode: box
+    notify_service:
+      name: Notify action
+      description: e.g. notify.mobile_app_my_phone
+      selector:
+        text:
+    pay_timeout_minutes:
+      name: Payment timeout (minutes)
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          mode: box
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input cable_sensor
+    to: "on"
+
+conditions:
+  - condition: zone
+    entity_id: !input vehicle_tracker
+    zone: !input charge_zone
+
+actions:
+  - action: script.scaleev_start_charging
+    data:
+      station_id: !input station_id
+      connector_id: !input connector_id
+      target_kwh: !input target_kwh
+      notify_service: !input notify_service
+      pay_timeout_minutes: !input pay_timeout_minutes
