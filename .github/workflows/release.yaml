@@ -1,0 +1,42 @@
+name: Release
+# Creates a GitHub release (and its tag) for HACS. Run it from the Actions tab:
+# Actions -> Release -> Run workflow -> enter the version (e.g. 0.1.0).
+# Pushing a tag like v0.1.0 also works.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the leading v (must match manifest.json)"
+        required: true
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Work out the version and check it matches manifest.json
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          VERSION="${VERSION#v}"
+          MANIFEST=$(python3 -c "import json;print(json.load(open('custom_components/scaleev/manifest.json'))['version'])")
+          if [ "$VERSION" != "$MANIFEST" ]; then
+            echo "::error::Version $VERSION does not match manifest.json ($MANIFEST)"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.v.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"; exit 0
+          fi
+          gh release create "$TAG" --target "${{ github.sha }}" --title "$TAG" --generate-notes

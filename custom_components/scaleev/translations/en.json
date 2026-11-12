@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to your charging network",
-        "description": "Paste any link from your charging network's web app (for example https://yournetwork.scaleev.scaletech.xyz/map).",
+        "description": "Paste any link from your charging network's web app (for example {example}).",
         "data": {
           "link": "Link",
           "api_base": "API base URL (only if setup can't work it out)"

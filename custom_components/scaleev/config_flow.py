@@ -147,7 +147,10 @@ class ScaleEVConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_API_BASE): TextSelector(TextSelectorConfig(type=TextSelectorType.URL)),
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=schema, errors=errors,
+            description_placeholders={"example": "https://yournetwork.scaleev.scaletech.xyz/map"},
+        )
 
     # -- 2. login ----------------------------------------------------------
     async def async_step_login(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
