@@ -1,0 +1,12 @@
+{
+  "domain": "scaleev",
+  "name": "ScaleEV",
+  "codeowners": ["@elvinzhou"],
+  "config_flow": true,
+  "documentation": "https://github.com/elvinzhou/ha-scaleev",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/elvinzhou/ha-scaleev/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

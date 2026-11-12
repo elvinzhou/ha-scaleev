@@ -1,61 +1,49 @@
 # ScaleEV for Home Assistant
 
-Start a ScaleEV (scaletech.xyz white-label networks such as Collectron Energy) charging session automatically when your vehicle's charge cable is connected at a location you choose.
+Start a [ScaleEV](https://scaletech.xyz)-powered charging session automatically when you plug in. Set up entirely from the Home Assistant UI.
 
-> Unofficial. Built from the web app's HTTP API; it may change without notice. Not affiliated with ScaleEV.
+> Unofficial. Built on the web app's HTTP API, which may change without notice. Not affiliated with ScaleEV or any charging network.
 
-## How it works
-1. Cable sensor turns `on` and the vehicle is inside your chosen zone.
-2. The `scaleev_start_charging` script logs in and calls remote-start.
-3. **First session only:** ScaleEV returns a Stripe Checkout link. You get a notification with a **Pay now** button. The script waits (default 10 min) for the payment hold to be authorized.
-4. You get a success or failure notification.
+## What it does
+1. Your vehicle's **charge cable connected** sensor turns on while the vehicle is **inside your chosen zone**.
+2. The integration logs in, requests a remote start for your chosen station and connector, and targets the energy you configured.
+3. **First session only:** ScaleEV returns a Stripe checkout link. You get a notification with a **Pay now** button, and the integration waits (default 10 minutes) for the payment hold to be authorized.
+4. You get a notification when charging starts, or when it fails or times out.
 
-## Quick start
+## Install
+**HACS (recommended):** HACS → ⋮ → *Custom repositories* → add `https://github.com/elvinzhou/ha-scaleev` as an *Integration* → install **ScaleEV** → restart Home Assistant.
+
+**Manual:** copy `custom_components/scaleev` into your Home Assistant `custom_components` folder and restart.
+
+## Set up
+Settings → Devices & services → **Add integration** → **ScaleEV**, then:
+1. **Link:** paste any link from your charging network's web app (for example `https://yournetwork.scaleev.scaletech.xyz/map`). If the API address can't be worked out from the link, enter it in the optional field.
+2. **Log in** with your ScaleEV account.
+3. **Pick** the location, station and connector from lists.
+4. **Settings:** target energy, cable sensor, vehicle tracker, charging zone, notify action and payment timeout. Set the target to your vehicle's **usable battery capacity** so the session isn't cut short.
+
+Change any of the settings later with the integration's **Configure** button. Add the integration again for a second station or vehicle.
+
+## Entities
+| Entity | What it is |
+| --- | --- |
+| Button *Start charging* | Start a session now, ignoring the cable sensor and zone |
+| Switch *Auto-start on plug-in* | Turn automatic starting on or off |
+| Sensor *Connector status* | OCPP status of your connector (e.g. `Available`, `Preparing`, `Charging`) |
+| Sensors *Session status / energy / cost* | The live session, when there is one |
+
+## Limitations
+- **Cards can't be linked through the API.** The first session needs a one-time Stripe checkout (the **Pay now** notification). Whether a second session skips checkout depends on ScaleEV; please open an issue if it doesn't for you.
+- There is no stop command yet. Stop sessions in the ScaleEV app.
+- Your ScaleEV password is stored in Home Assistant's config-entry storage, like other integrations' credentials.
+- If your password changes, Home Assistant will ask you to re-enter it.
+
+## Development
 ```bash
-git clone https://github.com/elvinzhou/ha-scaleev && cd ha-scaleev
-python3 setup.py
+pip install -r requirements_test.txt
+pytest
 ```
-The setup script asks for:
-1. a link from your charging network's web app (e.g. `https://yournetwork.scaleev.scaletech.xyz/map`),
-2. your account login (used only to log in and to write `secrets.yaml`),
-3. your location, station and connector (picked from a list),
-4. your target energy (your vehicle's usable battery capacity),
-5. your cable sensor, vehicle tracker, charging zone and notify action,
-6. your Home Assistant config directory (or any folder, if you'd rather copy the files yourself).
-
-It writes the package, blueprint, an automation and `secrets.yaml` entries (existing `secrets.yaml` is backed up). Then restart Home Assistant. Python 3.9+ is the only requirement.
-
-**Cards:** a card can't be linked through the API. The first session returns a Stripe checkout link; you'll get a **Pay now** notification and complete it once.
-
-## Manual install
-1. Copy `packages/scaleev.yaml` to `<config>/packages/` and enable packages if you haven't:
-   ```yaml
-   homeassistant:
-     packages: !include_dir_named packages
-   ```
-2. Add the keys from `secrets.example.yaml` to your `secrets.yaml`.
-3. Copy `blueprints/automation/scaleev/` to `<config>/blueprints/automation/scaleev/`.
-4. Restart Home Assistant, then create an automation from the blueprint **ScaleEV - start charging on plug-in**.
-
-## Finding your station ID by hand
-`setup.py` does this for you. To do it manually, log in and list stations (replace the values):
-```bash
-API=https://api-scaleev.demo.scaletech.xyz
-TOKEN=$(curl -s $API/drivers/auth/login -H 'content-type: application/json' \
-  -d '{"email":"you@example.com","password":"...","tenantSlug":"your-tenant"}' | jq -r .data.access_token)
-curl -s $API/drivers/locations -H "authorization: Bearer $TOKEN" | jq '.data[] | {id,name}'
-curl -s $API/drivers/locations/<LOCATION_ID>/stations -H "authorization: Bearer $TOKEN" | jq '.data[] | {id,name,status}'
-```
-Use the station `id` (UUID) in the blueprint. Connector is usually `1`.
-
-## Target energy
-Set the target to your vehicle's usable battery capacity so the session isn't cut short.
-
-## Not implemented
-Auto-completing Stripe Checkout with a saved card when you don't respond. See the discussion in the issue tracker before adding it.
-
-## Security
-Never commit `secrets.yaml` or browser HAR captures (they contain credentials). `.gitignore` excludes both.
+Tests run the config flow and the start sequence against a mocked API. Never commit browser HAR captures; they contain credentials (`*.har` is git-ignored).
 
 ## License
 MIT - see [LICENSE](LICENSE).

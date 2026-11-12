@@ -222,3 +222,4 @@ __marimo__/
 # Local secrets and captures (never commit)
 secrets.yaml
 *.har
+.pytest_cache/
