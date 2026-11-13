@@ -9,6 +9,7 @@ from homeassistant.const import (
     ATTR_GPS_ACCURACY,
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
+    STATE_OFF,
     STATE_ON,
     Platform,
 )
@@ -29,6 +30,8 @@ from .const import (
     CONF_PASSWORD,
     CONF_RADIUS,
     DEFAULT_RADIUS,
+    STATUS_AUTO_OFF,
+    STATUS_AWAY,
     CONF_TENANT_SLUG,
     CONF_VEHICLE_TRACKER,
 )
@@ -89,20 +92,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
     manager = ChargeManager(hass, entry, client, coordinator)
     entry.runtime_data = manager
 
+    cable_id = entry.options[CONF_CABLE_SENSOR]
+    # The last real (on/off) cable state. Vehicle integrations drop to
+    # unavailable/unknown whenever the car sleeps or the cloud hiccups; only
+    # a genuine off -> on counts as plugging in, however many gaps in between.
+    initial = hass.states.get(cable_id)
+    cable_was: str | None = initial.state if initial and initial.state in (STATE_ON, STATE_OFF) else None
+
     @callback
     def _cable_changed(event: Event[EventStateChangedData]) -> None:
-        old, new = event.data["old_state"], event.data["new_state"]
-        if new is None or new.state != STATE_ON or old is None or old.state == STATE_ON:
+        nonlocal cable_was
+        new = event.data["new_state"]
+        if new is None or new.state not in (STATE_ON, STATE_OFF):
+            return
+        previous, cable_was = cable_was, new.state
+        if new.state != STATE_ON or previous != STATE_OFF:
             return
         if not manager.auto_start:
+            manager.async_set_status(STATUS_AUTO_OFF)
             return
         if not _vehicle_at_charger(hass, entry):
-            _LOGGER.debug("Cable connected away from the charging location, ignoring")
+            manager.async_set_status(STATUS_AWAY, f"{entry.options[CONF_VEHICLE_TRACKER]} is not at the charging location")
             return
-        manager.async_trigger(manual=False)
+        if not manager.async_trigger(manual=False):
+            _LOGGER.info("Cable connected while a ScaleEV start is already in progress")
 
     entry.async_on_unload(
-        async_track_state_change_event(hass, [entry.options[CONF_CABLE_SENSOR]], _cable_changed)
+        async_track_state_change_event(hass, [cable_id], _cable_changed)
     )
     entry.async_on_unload(entry.add_update_listener(_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -58,6 +58,8 @@ def _settings_schema(hass) -> vol.Schema:
         for name in hass.services.async_services_for_domain("notify")
         if name not in ("send_message", "persistent_notification")
     )
+    # Newer integrations provide notify entities instead of their own action.
+    services += sorted(e for e in hass.states.async_entity_ids("notify") if e not in services)
     return vol.Schema(
         {
             vol.Required(CONF_TARGET_KWH): NumberSelector(
