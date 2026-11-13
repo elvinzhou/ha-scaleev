@@ -42,7 +42,7 @@
           "cable_sensor": "Charge cable connected sensor",
           "vehicle_tracker": "Vehicle location tracker",
           "charge_zone": "Charging zone (optional override)",
-          "notify_service": "Notify action",
+          "notify_service": "Notify action or entity (app, email, Telegram, ...)",
           "pay_timeout": "Payment timeout",
           "radius": "Radius around the location"
         }
@@ -80,7 +80,7 @@
           "cable_sensor": "Charge cable connected sensor",
           "vehicle_tracker": "Vehicle location tracker",
           "charge_zone": "Charging zone (optional override)",
-          "notify_service": "Notify action",
+          "notify_service": "Notify action or entity (app, email, Telegram, ...)",
           "pay_timeout": "Payment timeout",
           "radius": "Radius around the location"
         },

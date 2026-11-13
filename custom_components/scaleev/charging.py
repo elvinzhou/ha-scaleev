@@ -166,29 +166,50 @@ class ChargeManager:
     async def _notify_payment(self, result: StartResult, target: float) -> None:
         await self._notify(
             "ScaleEV: payment needed",
-            f"Tap to authorize payment and start charging ({target} kWh).",
+            f"Authorize payment to start charging ({target} kWh).",
             data={
                 "tag": NOTIFICATION_TAG,
                 "clickAction": result.checkout_url,
                 "url": result.checkout_url,
                 "actions": [{"action": "URI", "title": "Pay now", "uri": result.checkout_url}],
             },
+            link=result.checkout_url,
         )
 
-    async def _notify(self, title: str, message: str, data: dict | None = None, clear: bool = False) -> None:
-        service = (self.entry.options.get(CONF_NOTIFY_SERVICE) or "").removeprefix("notify.")
-        payload: dict[str, Any] = {"message": message}
-        if clear:
-            payload["data"] = {"tag": NOTIFICATION_TAG}
-        else:
-            payload["title"] = title
-            if data:
-                payload["data"] = data
-        if service and self.hass.services.has_service("notify", service):
-            try:
+    async def _notify(
+        self, title: str, message: str, data: dict | None = None, clear: bool = False, link: str | None = None
+    ) -> None:
+        """Send through the configured notify action or entity, else a persistent notification.
+
+        Only the companion app understands the tap actions in ``data`` and the
+        clear command. Everything else (email, Telegram, ...) gets the link in
+        the message text, and nothing at all for a clear.
+        """
+        target = self.entry.options.get(CONF_NOTIFY_SERVICE) or ""
+        service = target.removeprefix("notify.")
+        mobile = service.startswith("mobile_app_")
+        if clear and not mobile:
+            return
+        plain = f"{message} {link}" if link else message
+        try:
+            if service and self.hass.services.has_service("notify", service):
+                payload: dict[str, Any] = {"message": message if mobile else plain}
+                if clear:
+                    payload["data"] = {"tag": NOTIFICATION_TAG}
+                else:
+                    payload["title"] = title
+                    if data and mobile:
+                        payload["data"] = data
                 await self.hass.services.async_call("notify", service, payload, blocking=True)
                 return
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("Notify service %s failed", service)
+            if target.startswith("notify.") and self.hass.states.get(target) is not None:
+                await self.hass.services.async_call(
+                    "notify", "send_message", {"entity_id": target, "title": title, "message": plain}, blocking=True
+                )
+                return
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Notify target %s failed", target)
         if not clear:
-            persistent_notification.async_create(self.hass, message, title=title)
+            persistent_notification.async_create(
+                self.hass, f"{message} [Pay now]({link})" if link else message, title=title
+            )

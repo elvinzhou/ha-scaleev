@@ -35,6 +35,13 @@ Change any of the settings later with the integration's **Configure** button. Ad
 | Sensors *Session status / energy / cost* | The live session, when there is one |
 | Sensor *Start status* | What the last start attempt did, and why a plug-in was skipped (vehicle not at the charger, already charging, payment not completed, ...). The `detail` attribute has the specifics |
 
+## Notifications
+The **Notify action** setting accepts any Home Assistant notify action or notify entity, not just the companion app:
+
+- **Companion app** (`notify.mobile_app_...`): a push notification with a **Pay now** button.
+- **Anything else**, such as email ([SMTP](https://www.home-assistant.io/integrations/smtp/)), Telegram, ntfy, Pushover or Signal: a plain message with the checkout link in the text. Set that integration up in Home Assistant first, then pick it here.
+- If the action can't be found or fails, the message appears in Home Assistant's own notifications (the bell icon) with a **Pay now** link.
+
 ## Troubleshooting
 If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped. If it never changes from *Waiting for plug-in*, the cable sensor didn't go from `off` to `on`. Only that change counts as plugging in; a sensor that was already `on` when Home Assistant started, or that comes back `on` after being `unavailable`, does not start a session. The **Start charging** button always works.
 

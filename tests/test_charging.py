@@ -282,3 +282,35 @@ async def test_button_press_while_running_is_reported(hass, aioclient_mock):
         release.set()
         await entry.runtime_data._task
     assert hass.states.get("sensor.cdn31_start_status").state == "started"
+
+
+async def test_email_style_notify_gets_link_in_text(hass, aioclient_mock):
+    """Anything that isn't the companion app can't use tap actions or clear commands."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    email = async_mock_service(hass, "notify", "email_me")
+    entry, _ = await _setup(hass, aioclient_mock, notify_service="notify.email_me")
+    await _plug_in(hass, entry)
+    assert [c.data["title"] for c in email] == ["ScaleEV: payment needed", "ScaleEV: charging started"]
+    assert "https://checkout.example/pay" in email[0].data["message"]
+    assert "data" not in email[0].data
+
+
+async def test_notify_entity(hass, aioclient_mock):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    sent = async_mock_service(hass, "notify", "send_message")
+    hass.states.async_set("notify.my_phone", "unknown")
+    entry, _ = await _setup(hass, aioclient_mock, notify_service="notify.my_phone")
+    await _plug_in(hass, entry)
+    assert sent[0].data["entity_id"] == "notify.my_phone"
+    assert "https://checkout.example/pay" in sent[0].data["message"]
+    assert len(sent) == 2
+
+
+async def test_missing_notify_action_falls_back_with_link(hass, aioclient_mock):
+    from unittest.mock import patch
+
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    with patch("custom_components.scaleev.charging.persistent_notification.async_create") as create:
+        entry, _ = await _setup(hass, aioclient_mock, notify_service="notify.gone")
+        await _plug_in(hass, entry)
+    assert "[Pay now](https://checkout.example/pay)" in create.call_args_list[0].args[1]
