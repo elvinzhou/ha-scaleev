@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.exceptions import HomeAssistantError
 
 from .entity import ScaleEVEntity
 
@@ -12,4 +13,5 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class StartButton(ScaleEVEntity, ButtonEntity):
     async def async_press(self) -> None:
-        self.manager.async_trigger(manual=True)
+        if not self.manager.async_trigger(manual=True):
+            raise HomeAssistantError("A start is already in progress")

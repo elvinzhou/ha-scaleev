@@ -114,6 +114,21 @@
       },
       "session_cost": {
         "name": "Session cost"
+      },
+      "start_status": {
+        "name": "Start status",
+        "state": {
+          "idle": "Waiting for plug-in",
+          "auto_start_off": "Skipped: auto-start is off",
+          "away": "Skipped: vehicle not at charger",
+          "already_charging": "Skipped: already charging",
+          "starting": "Starting",
+          "awaiting_payment": "Waiting for payment",
+          "started": "Charging started",
+          "payment_timeout": "Payment not completed",
+          "not_confirmed": "Start not confirmed",
+          "failed": "Failed"
+        }
       }
     }
   }
