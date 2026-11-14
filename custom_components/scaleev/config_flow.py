@@ -22,6 +22,7 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
+    TimeSelector,
 )
 
 from .api import ScaleEVAuthError, ScaleEVClient, ScaleEVError, parse_link
@@ -46,6 +47,8 @@ from .const import (
     CONF_TARGET_KWH,
     CONF_TENANT_SLUG,
     CONF_VEHICLE_TRACKER,
+    CONF_WINDOW_END,
+    CONF_WINDOW_START,
     DEFAULT_PAY_TIMEOUT,
     DEFAULT_RADIUS,
     DOMAIN,
@@ -77,6 +80,8 @@ def _settings_schema(hass) -> vol.Schema:
             vol.Required(CONF_PAY_TIMEOUT, default=DEFAULT_PAY_TIMEOUT): NumberSelector(
                 NumberSelectorConfig(min=1, max=60, unit_of_measurement="min", mode=NumberSelectorMode.BOX)
             ),
+            vol.Optional(CONF_WINDOW_START): TimeSelector(),
+            vol.Optional(CONF_WINDOW_END): TimeSelector(),
         }
     )
 
@@ -90,10 +95,16 @@ def _options(user_input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _settings_errors(user_input: dict[str, Any], has_coordinates: bool) -> dict[str, str]:
-    """A zone is required when ScaleEV gave us no coordinates for the location."""
+    """A zone is required without coordinates; the charging window needs both ends."""
+    errors: dict[str, str] = {}
     if not has_coordinates and not user_input.get(CONF_CHARGE_ZONE):
-        return {CONF_CHARGE_ZONE: "zone_required"}
-    return {}
+        errors[CONF_CHARGE_ZONE] = "zone_required"
+    start, end = user_input.get(CONF_WINDOW_START), user_input.get(CONF_WINDOW_END)
+    if bool(start) != bool(end):
+        errors[CONF_WINDOW_END if start else CONF_WINDOW_START] = "window_incomplete"
+    elif start and start == end:
+        errors[CONF_WINDOW_END] = "window_empty"
+    return errors
 
 
 class ScaleEVConfigFlow(ConfigFlow, domain=DOMAIN):

@@ -18,13 +18,14 @@ LIVE_AUTH = {"id": "sess-1", "status": "in-progress", "paymentStatus": "authoriz
              "totalCost": 0.9, "currency": "USD"}
 
 
-def mock_api(mock, *, start=None, live_session=None, live_current=None, locations=None):
+def mock_api(mock, *, start=None, live_session=None, live_current=None, locations=None, connector="Preparing"):
     """Register the ScaleEV API on an aioclient_mock."""
     mock.get(f"{API}/public/tenants/demo/config", json={"success": True, "data": {"slug": "demo-net", "appName": "Demo Net"}})
     mock.post(f"{API}/drivers/auth/login", json=LOGIN)
     mock.get(f"{API}/drivers/locations", json={"success": True, "data": locations or LOCATIONS})
     mock.get(f"{API}/drivers/locations/loc-1/stations", json={"success": True, "data": STATIONS})
-    mock.get(f"{API}/drivers/stations/{STATION}", json={"success": True, "data": STATIONS[0]})
+    station = {**STATIONS[0], "status": connector, "connectors": [{**STATIONS[0]["connectors"][0], "status": connector}]}
+    mock.get(f"{API}/drivers/stations/{STATION}", json={"success": True, "data": station})
     if start is not None:
         mock.post(f"{API}/drivers/charging/remote-start/{STATION}", json={"success": True, "data": start})
     if live_session is not None:

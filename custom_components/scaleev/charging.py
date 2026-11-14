@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -9,16 +10,20 @@ from typing import Any
 from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 
 from .api import ScaleEVAuthError, ScaleEVClient, ScaleEVError, StartResult
 from .const import (
     CONF_CONNECTOR_ID,
+    CONF_EMAIL,
     CONF_NOTIFY_SERVICE,
+    CONF_PASSWORD,
     CONF_PAY_TIMEOUT,
     CONF_STATION_ID,
     CONF_STATION_NAME,
     CONF_TARGET_KWH,
     DEFAULT_PAY_TIMEOUT,
+    DOMAIN,
     NO_PAYMENT_WAIT,
     NOTIFICATION_TAG,
     PAID_STATUSES,
@@ -58,6 +63,23 @@ class ChargeManager:
         self.status_detail: str | None = None
         self._status_listeners: list[Callable[[], None]] = []
         self._task: asyncio.Task | None = None
+        # The checkout link of the attempt in progress, while it awaits payment.
+        self.checkout_url: str | None = None
+
+    @property
+    def link_token(self) -> str:
+        """Secret in the start link. Stable across restarts; changes with the password."""
+        seed = f"{self.entry.entry_id}:{self.entry.data[CONF_EMAIL]}:{self.entry.data[CONF_PASSWORD]}"
+        return hashlib.sha256(seed.encode()).hexdigest()[:40]
+
+    @property
+    def start_link(self) -> str | None:
+        """A link that starts charging and lands on the payment page; None if Home Assistant has no URL."""
+        try:
+            base = get_url(self.hass, prefer_external=True, allow_cloud=True)
+        except NoURLAvailableError:
+            return None
+        return f"{base}/api/{DOMAIN}/start/{self.link_token}"
 
     @callback
     def async_add_status_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
@@ -67,6 +89,8 @@ class ChargeManager:
     @callback
     def async_set_status(self, status: str, detail: str | None = None) -> None:
         """Record the outcome of a start attempt for the Start status sensor."""
+        if (status, detail) == (self.status, self.status_detail):
+            return
         self.status = status
         self.status_detail = detail
         _LOGGER.info("ScaleEV start status: %s%s", status, f" ({detail})" if detail else "")
@@ -104,6 +128,8 @@ class ChargeManager:
             _LOGGER.exception("Unexpected error starting ScaleEV session")
             self.async_set_status(STATUS_FAILED, "Unexpected error, see the log")
             await self._notify("ScaleEV: could not start charging", "Unexpected error, see the Home Assistant log.")
+        finally:
+            self.checkout_url = None
 
     @property
     def _name(self) -> str:
@@ -128,6 +154,7 @@ class ChargeManager:
         )
         needs_payment = bool(result.checkout_url) and result.payment_status == "pending"
         if needs_payment:
+            self.checkout_url = result.checkout_url
             self.async_set_status(STATUS_AWAITING_PAYMENT)
             await self._notify_payment(result, target)
             wait_seconds = float(opts.get(CONF_PAY_TIMEOUT, DEFAULT_PAY_TIMEOUT)) * 60
@@ -143,7 +170,13 @@ class ChargeManager:
             await self._notify("ScaleEV: charging started", f"{self._name} is {live.get('status', 'started')} ({target} kWh target).")
         elif needs_payment:
             self.async_set_status(STATUS_PAYMENT_TIMEOUT)
-            await self._notify("ScaleEV: charging did not start", f"Payment was not completed within {int(wait_seconds // 60)} minutes.")
+            again = self.start_link
+            await self._notify(
+                "ScaleEV: charging did not start",
+                f"Payment was not completed within {int(wait_seconds // 60)} minutes.",
+                data={"actions": [{"action": "URI", "title": "Try again", "uri": again}]} if again else None,
+                links=[("Try again", again)] if again else None,
+            )
         else:
             self.async_set_status(STATUS_NOT_CONFIRMED)
             await self._notify("ScaleEV: charging did not start", "The session could not be confirmed.")
@@ -164,6 +197,10 @@ class ChargeManager:
         return None
 
     async def _notify_payment(self, result: StartResult, target: float) -> None:
+        links = [("Pay now", result.checkout_url)]
+        if again := self.start_link:
+            # Checkout links expire; this one always leads to a current one.
+            links.append(("If that link has expired, get a new one", again))
         await self._notify(
             "ScaleEV: payment needed",
             f"Authorize payment to start charging ({target} kWh).",
@@ -171,18 +208,24 @@ class ChargeManager:
                 "tag": NOTIFICATION_TAG,
                 "clickAction": result.checkout_url,
                 "url": result.checkout_url,
-                "actions": [{"action": "URI", "title": "Pay now", "uri": result.checkout_url}],
+                "actions": [{"action": "URI", "title": "Pay now", "uri": result.checkout_url}]
+                + ([{"action": "URI", "title": "New payment link", "uri": again}] if again else []),
             },
-            link=result.checkout_url,
+            links=links,
         )
 
     async def _notify(
-        self, title: str, message: str, data: dict | None = None, clear: bool = False, link: str | None = None
+        self,
+        title: str,
+        message: str,
+        data: dict | None = None,
+        clear: bool = False,
+        links: list[tuple[str, str]] | None = None,
     ) -> None:
         """Send through the configured notify action or entity, else a persistent notification.
 
         Only the companion app understands the tap actions in ``data`` and the
-        clear command. Everything else (email, Telegram, ...) gets the link in
+        clear command. Everything else (email, Telegram, ...) gets the links in
         the message text, and nothing at all for a clear.
         """
         target = self.entry.options.get(CONF_NOTIFY_SERVICE) or ""
@@ -190,7 +233,7 @@ class ChargeManager:
         mobile = service.startswith("mobile_app_")
         if clear and not mobile:
             return
-        plain = f"{message} {link}" if link else message
+        plain = message + "".join(f"\n{label}: {url}" for label, url in links or [])
         try:
             if service and self.hass.services.has_service("notify", service):
                 payload: dict[str, Any] = {"message": message if mobile else plain}
@@ -210,6 +253,5 @@ class ChargeManager:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Notify target %s failed", target)
         if not clear:
-            persistent_notification.async_create(
-                self.hass, f"{message} [Pay now]({link})" if link else message, title=title
-            )
+            markdown = " ".join([message, *(f"[{label}]({url})" for label, url in links or [])])
+            persistent_notification.async_create(self.hass, markdown, title=title)
