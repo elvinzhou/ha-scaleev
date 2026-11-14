@@ -43,39 +43,53 @@ PLATFORMS = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
 type ScaleEVConfigEntry = ConfigEntry[ChargeManager]
 
 
-def _vehicle_in_zone(hass: HomeAssistant, tracker_id: str, zone_id: str) -> bool:
-    tracker = hass.states.get(tracker_id)
-    zone = hass.states.get(zone_id)
-    if tracker is None or zone is None:
-        return False
-    lat = tracker.attributes.get(ATTR_LATITUDE)
-    lon = tracker.attributes.get(ATTR_LONGITUDE)
-    if lat is not None and lon is not None:
-        return in_zone(zone, lat, lon, tracker.attributes.get(ATTR_GPS_ACCURACY) or 0)
-    # No GPS attributes (e.g. router-based trackers): compare zone names.
-    name = zone.name.lower()
-    return tracker.state.lower() == name or (zone_id == "zone.home" and tracker.state == "home")
+def _why_not_at_charger(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
+    """None if the vehicle is at the charger, else the reason it is not.
 
-
-def _vehicle_at_charger(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """True if the vehicle is in the chosen zone, or near the location's coordinates."""
+    The reason ends up in the Start status sensor, so it names the numbers
+    that decided it: a skipped plug-in is otherwise impossible to debug.
+    """
     opts = entry.options
     tracker_id = opts[CONF_VEHICLE_TRACKER]
-    if zone_id := opts.get(CONF_CHARGE_ZONE):
-        return _vehicle_in_zone(hass, tracker_id, zone_id)
     tracker = hass.states.get(tracker_id)
-    lat = entry.data.get(CONF_LOCATION_LAT)
-    lon = entry.data.get(CONF_LOCATION_LON)
-    if tracker is None or lat is None or lon is None:
-        return False
+    if tracker is None:
+        return f"{tracker_id} does not exist"
     t_lat = tracker.attributes.get(ATTR_LATITUDE)
     t_lon = tracker.attributes.get(ATTR_LONGITUDE)
-    if t_lat is None or t_lon is None:
-        _LOGGER.debug("%s has no GPS position; choose a zone in the options instead", tracker_id)
-        return False
-    metres = distance(t_lat, t_lon, lat, lon)
+    has_gps = t_lat is not None and t_lon is not None
     accuracy = tracker.attributes.get(ATTR_GPS_ACCURACY) or 0
-    return metres is not None and metres - accuracy < opts.get(CONF_RADIUS, DEFAULT_RADIUS)
+
+    if zone_id := opts.get(CONF_CHARGE_ZONE):
+        zone = hass.states.get(zone_id)
+        if zone is None:
+            return f"{zone_id} does not exist"
+        if has_gps:
+            if in_zone(zone, t_lat, t_lon, accuracy):
+                return None
+            return f"{tracker_id} is at {t_lat}, {t_lon}, outside {zone_id}"
+        # No GPS attributes (e.g. router-based trackers): compare zone names.
+        if tracker.state.lower() == zone.name.lower() or (zone_id == "zone.home" and tracker.state == "home"):
+            return None
+        return f"{tracker_id} has no GPS position and its state is '{tracker.state}', not {zone_id}"
+
+    lat = entry.data.get(CONF_LOCATION_LAT)
+    lon = entry.data.get(CONF_LOCATION_LON)
+    if lat is None or lon is None:
+        return "ScaleEV has no coordinates for this location; choose a zone in the settings"
+    if not has_gps:
+        return (
+            f"{tracker_id} has no GPS position (state '{tracker.state}'); "
+            "choose a zone in the settings or pick a tracker with latitude and longitude"
+        )
+    metres = distance(t_lat, t_lon, lat, lon)
+    radius = opts.get(CONF_RADIUS, DEFAULT_RADIUS)
+    if metres is not None and metres - accuracy < radius:
+        return None
+    return (
+        f"{tracker_id} is at {t_lat}, {t_lon}, {round(metres or 0)} m from the charging location "
+        f"ScaleEV reports at {lat}, {lon} (radius {round(radius)} m); "
+        "raise the radius or choose a zone in the settings"
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> bool:
@@ -111,8 +125,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
         if not manager.auto_start:
             manager.async_set_status(STATUS_AUTO_OFF)
             return
-        if not _vehicle_at_charger(hass, entry):
-            manager.async_set_status(STATUS_AWAY, f"{entry.options[CONF_VEHICLE_TRACKER]} is not at the charging location")
+        if reason := _why_not_at_charger(hass, entry):
+            manager.async_set_status(STATUS_AWAY, reason)
             return
         if not manager.async_trigger(manual=False):
             _LOGGER.info("Cable connected while a ScaleEV start is already in progress")

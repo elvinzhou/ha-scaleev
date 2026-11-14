@@ -314,3 +314,27 @@ async def test_missing_notify_action_falls_back_with_link(hass, aioclient_mock):
         entry, _ = await _setup(hass, aioclient_mock, notify_service="notify.gone")
         await _plug_in(hass, entry)
     assert "[Pay now](https://checkout.example/pay)" in create.call_args_list[0].args[1]
+
+
+async def test_away_detail_gives_distance_and_radius(hass, aioclient_mock):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, _ = await _setup(hass, aioclient_mock, radius=50)
+    hass.states.async_set("device_tracker.car", "home",
+                          {"latitude": hass.config.latitude + 0.001, "longitude": hass.config.longitude, "gps_accuracy": 0})
+    await _plug_in(hass, entry)
+    detail = hass.states.get("sensor.cdn31_start_status").attributes["detail"]
+    assert "111 m from the charging location" in detail and "radius 50 m" in detail
+
+
+async def test_away_detail_says_when_tracker_has_no_gps(hass, aioclient_mock):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, _ = await _setup(hass, aioclient_mock, gps=False)
+    await _plug_in(hass, entry)
+    assert "has no GPS position" in hass.states.get("sensor.cdn31_start_status").attributes["detail"]
+
+
+async def test_zone_without_gps_matches_state(hass, aioclient_mock):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, gps=False, charge_zone="zone.home")
+    await _plug_in(hass, entry)
+    assert notify[0].data["title"] == "ScaleEV: payment needed"
