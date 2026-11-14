@@ -33,6 +33,9 @@ POLL_SECONDS = 10  # while waiting for payment authorization
 NO_PAYMENT_WAIT = 120  # seconds to wait for confirmation when no payment is needed
 PAID_STATUSES = ("authorized", "captured")
 UNPAID_STATUS = "pending"
+# OCPP connector statuses (compared in lower case).
+CONNECTOR_FREE = "available"  # nothing plugged in
+CONNECTOR_WAITING = "preparing"  # a car is plugged in and no session is running
 
 # States of the "Start status" sensor: why the last attempt did or did not start.
 STATUS_IDLE = "idle"

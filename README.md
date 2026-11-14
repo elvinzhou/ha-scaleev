@@ -43,7 +43,14 @@ The **Notify action** setting accepts any Home Assistant notify action or notify
 - If the action can't be found or fails, the message appears in Home Assistant's own notifications (the bell icon) with a **Pay now** link.
 
 ## Troubleshooting
-If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped. If it never changes from *Waiting for plug-in*, the cable sensor didn't go from `off` to `on`. Only that change counts as plugging in; a sensor that was already `on` when Home Assistant started, or that comes back `on` after being `unavailable`, does not start a session. The **Start charging** button always works.
+If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped, with the numbers in its `detail` attribute.
+
+A plug-in is seen in either of two ways, and each plug-in gets one automatic attempt:
+
+- the cable sensor changes from `off` to `on`; or
+- the cable sensor is `on` and **Connector status** is `Preparing` (the charger itself reports a car connected and waiting). This covers vehicle integrations that poll slowly and never show the change, for example when you arrive straight from another charger.
+
+Both depend on polling, so allow a few minutes: ScaleEV is checked every 2 minutes, and your vehicle's integration on its own schedule. When the charger reports a plug-in, the integration asks Home Assistant to refresh the cable sensor and tracker straight away. The **Start charging** button always works immediately.
 
 ## Limitations
 - **Cards can't be linked through the API.** The first session needs a one-time Stripe checkout (the **Pay now** notification). Whether a second session skips checkout depends on ScaleEV; please open an issue if it doesn't for you.

@@ -194,8 +194,20 @@ async def test_plug_in_seen_through_a_dropout(hass, aioclient_mock):
     assert len(_starts(aioclient_mock)) == 1
 
 
-async def test_already_plugged_in_at_startup_does_not_start(hass, aioclient_mock):
-    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+async def _poll(hass, mock, entry, connector, **api):
+    """Simulate the next poll of ScaleEV returning this connector status."""
+    mock.clear_requests()
+    mock_api(mock, connector=connector, **api)
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    task = entry.runtime_data._task
+    if task:
+        await task
+
+
+async def test_already_plugged_in_at_startup(hass, aioclient_mock):
+    """Cable already on when Home Assistant starts: start only if the charger says a car is waiting."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH, connector="Finishing")
     notify = async_mock_service(hass, "notify", "mobile_app_pat")
     set_world(hass)
     hass.states.async_set("binary_sensor.car_cable", "unavailable")
@@ -204,6 +216,51 @@ async def test_already_plugged_in_at_startup_does_not_start(hass, aioclient_mock
     await hass.async_block_till_done()
     await _plug_in(hass, entry)
     assert not _starts(aioclient_mock) and not notify
+    await _poll(hass, aioclient_mock, entry, "Preparing", start=PENDING_START, live_session=LIVE_AUTH)
+    assert len(_starts(aioclient_mock)) == 1
+
+
+async def test_plug_in_the_cable_sensor_never_showed(hass, aioclient_mock):
+    """Arrive from another charger with the cable sensor still on: the charger's status is the signal."""
+    api = {"start": PENDING_START, "live_session": LIVE_AUTH}
+    mock_api(aioclient_mock, connector="Available", **api)
+    entry, notify = await _setup(hass, aioclient_mock, at_home=False)
+    await _plug_in(hass, entry)  # plugged in at a supercharger
+    assert hass.states.get("sensor.cdn31_start_status").state == "away"
+    # Home again; the car's sensor missed the unplug, so it never changes.
+    hass.states.async_set("device_tracker.car", "home",
+                          {"latitude": hass.config.latitude, "longitude": hass.config.longitude, "gps_accuracy": 5})
+    await hass.async_block_till_done()
+    assert not _starts(aioclient_mock)
+    await _poll(hass, aioclient_mock, entry, "Preparing", **api)
+    assert len(_starts(aioclient_mock)) == 1
+    assert hass.states.get("sensor.cdn31_start_status").state == "started"
+    # Later polls don't try again, even if the charger goes back to Preparing after the session.
+    await _poll(hass, aioclient_mock, entry, "Charging", **api)
+    await _poll(hass, aioclient_mock, entry, "Preparing", **api)
+    assert not _starts(aioclient_mock)
+    # Unplugged (connector free), then plugged in again: a new attempt.
+    await _poll(hass, aioclient_mock, entry, "Available", **api)
+    await _poll(hass, aioclient_mock, entry, "Preparing", **api)
+    assert len(_starts(aioclient_mock)) == 1
+
+
+async def test_someone_else_plugging_in_does_not_start(hass, aioclient_mock):
+    """Connector goes to Preparing while our cable is not connected."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH, connector="Available")
+    entry, notify = await _setup(hass, aioclient_mock)
+    await _poll(hass, aioclient_mock, entry, "Preparing", start=PENDING_START, live_session=LIVE_AUTH)
+    assert not _starts(aioclient_mock) and not notify
+
+
+async def test_charger_plug_in_refreshes_the_vehicle(hass, aioclient_mock):
+    """When the charger reports a plug-in, ask the car's integration for fresh data."""
+    mock_api(aioclient_mock, connector="Available")
+    refresh = async_mock_service(hass, "homeassistant", "update_entity")
+    entry, _ = await _setup(hass, aioclient_mock)
+    await _poll(hass, aioclient_mock, entry, "Preparing")
+    await hass.async_block_till_done()
+    assert refresh[0].data["entity_id"] == ["binary_sensor.car_cable", "device_tracker.car"]
 
 
 async def test_button_state_survives_api_outage(hass, aioclient_mock):

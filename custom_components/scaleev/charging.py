@@ -67,6 +67,8 @@ class ChargeManager:
     @callback
     def async_set_status(self, status: str, detail: str | None = None) -> None:
         """Record the outcome of a start attempt for the Start status sensor."""
+        if (status, detail) == (self.status, self.status_detail):
+            return
         self.status = status
         self.status_detail = detail
         _LOGGER.info("ScaleEV start status: %s%s", status, f" ({detail})" if detail else "")

@@ -29,6 +29,8 @@ from .const import (
     CONF_LOCATION_LON,
     CONF_PASSWORD,
     CONF_RADIUS,
+    CONNECTOR_FREE,
+    CONNECTOR_WAITING,
     DEFAULT_RADIUS,
     STATUS_AUTO_OFF,
     STATUS_AWAY,
@@ -107,11 +109,45 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
     entry.runtime_data = manager
 
     cable_id = entry.options[CONF_CABLE_SENSOR]
+    tracker_id = entry.options[CONF_VEHICLE_TRACKER]
     # The last real (on/off) cable state. Vehicle integrations drop to
-    # unavailable/unknown whenever the car sleeps or the cloud hiccups; only
-    # a genuine off -> on counts as plugging in, however many gaps in between.
+    # unavailable/unknown whenever the car sleeps or the cloud hiccups.
     initial = hass.states.get(cable_id)
     cable_was: str | None = initial.state if initial and initial.state in (STATE_ON, STATE_OFF) else None
+    # One automatic attempt per plug-in. Cleared when the cable is seen off or
+    # the charger reports the connector free again.
+    attempted = False
+    connector_was: str | None = None
+
+    def _connector() -> str:
+        return str((coordinator.data or {}).get("connector_status") or "").lower()
+
+    @callback
+    def _evaluate(plugged_in_now: bool = False) -> None:
+        """Start if the car is plugged in at the charger and we haven't tried yet.
+
+        A plug-in is either the cable sensor going off -> on, or the cable
+        sensor being on while the charger itself reports a car connected and
+        waiting ("Preparing"). The second catches plug-ins the car's slowly
+        polled sensor never showed as a change, e.g. arriving straight from
+        another charger with the sensor still on.
+        """
+        nonlocal attempted
+        connector = _connector()
+        if cable_was == STATE_OFF or connector == CONNECTOR_FREE:
+            attempted = False
+        if cable_was != STATE_ON or attempted or manager.running:
+            return
+        if not (plugged_in_now or connector == CONNECTOR_WAITING):
+            return
+        if not manager.auto_start:
+            manager.async_set_status(STATUS_AUTO_OFF)
+            return
+        if reason := _why_not_at_charger(hass, entry):
+            manager.async_set_status(STATUS_AWAY, reason)
+            return
+        attempted = True
+        manager.async_trigger(manual=False)
 
     @callback
     def _cable_changed(event: Event[EventStateChangedData]) -> None:
@@ -120,20 +156,43 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
         if new is None or new.state not in (STATE_ON, STATE_OFF):
             return
         previous, cable_was = cable_was, new.state
-        if new.state != STATE_ON or previous != STATE_OFF:
-            return
-        if not manager.auto_start:
-            manager.async_set_status(STATUS_AUTO_OFF)
-            return
-        if reason := _why_not_at_charger(hass, entry):
-            manager.async_set_status(STATUS_AWAY, reason)
-            return
-        if not manager.async_trigger(manual=False):
-            _LOGGER.info("Cable connected while a ScaleEV start is already in progress")
+        if new.state == STATE_OFF:
+            _evaluate()  # clears the one-attempt latch
+        _evaluate(plugged_in_now=new.state == STATE_ON and previous == STATE_OFF)
 
-    entry.async_on_unload(
-        async_track_state_change_event(hass, [cable_id], _cable_changed)
-    )
+    @callback
+    def _tracker_changed(event: Event[EventStateChangedData]) -> None:
+        _evaluate()
+
+    async def _refresh_vehicle() -> None:
+        """Ask the car's integration for fresh data instead of waiting for its next poll."""
+        try:
+            await hass.services.async_call(
+                "homeassistant", "update_entity", {"entity_id": [cable_id, tracker_id]}, blocking=True
+            )
+        except Exception as err:  # noqa: BLE001 - best effort
+            _LOGGER.debug("Could not refresh %s and %s: %s", cable_id, tracker_id, err)
+
+    @callback
+    def _polled() -> None:
+        nonlocal connector_was
+        connector = _connector()
+        previous, connector_was = connector_was, connector
+        if (
+            connector == CONNECTOR_WAITING
+            and previous not in (None, CONNECTOR_WAITING)
+            and manager.auto_start
+            and not attempted
+            and hass.services.has_service("homeassistant", "update_entity")
+        ):
+            # Someone just plugged in at our connector; find out now whether it was our car.
+            entry.async_create_background_task(hass, _refresh_vehicle(), name="scaleev refresh vehicle")
+        _evaluate()
+
+    connector_was = _connector()
+    entry.async_on_unload(async_track_state_change_event(hass, [cable_id], _cable_changed))
+    entry.async_on_unload(async_track_state_change_event(hass, [tracker_id], _tracker_changed))
+    entry.async_on_unload(coordinator.async_add_listener(_polled))
     entry.async_on_unload(entry.add_update_listener(_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
