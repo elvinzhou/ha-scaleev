@@ -26,6 +26,8 @@ CONF_CHARGE_ZONE = "charge_zone"
 CONF_NOTIFY_SERVICE = "notify_service"
 CONF_PAY_TIMEOUT = "pay_timeout"
 CONF_RADIUS = "radius"
+CONF_WINDOW_START = "window_start"
+CONF_WINDOW_END = "window_end"
 
 DEFAULT_PAY_TIMEOUT = 10  # minutes
 DEFAULT_RADIUS = 150  # metres around the location's coordinates
@@ -41,6 +43,7 @@ CONNECTOR_WAITING = "preparing"  # a car is plugged in and no session is running
 STATUS_IDLE = "idle"
 STATUS_AUTO_OFF = "auto_start_off"
 STATUS_AWAY = "away"
+STATUS_SCHEDULED = "scheduled"
 STATUS_ALREADY_CHARGING = "already_charging"
 STATUS_STARTING = "starting"
 STATUS_AWAITING_PAYMENT = "awaiting_payment"
@@ -49,7 +52,7 @@ STATUS_PAYMENT_TIMEOUT = "payment_timeout"
 STATUS_NOT_CONFIRMED = "not_confirmed"
 STATUS_FAILED = "failed"
 STATUSES = [
-    STATUS_IDLE, STATUS_AUTO_OFF, STATUS_AWAY, STATUS_ALREADY_CHARGING, STATUS_STARTING,
+    STATUS_IDLE, STATUS_AUTO_OFF, STATUS_AWAY, STATUS_SCHEDULED, STATUS_ALREADY_CHARGING, STATUS_STARTING,
     STATUS_AWAITING_PAYMENT, STATUS_STARTED, STATUS_PAYMENT_TIMEOUT, STATUS_NOT_CONFIRMED, STATUS_FAILED,
 ]
 

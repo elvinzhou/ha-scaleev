@@ -29,11 +29,22 @@ Change any of the settings later with the integration's **Configure** button. Ad
 ## Entities
 | Entity | What it is |
 | --- | --- |
-| Button *Start charging* | Start a session now, ignoring the cable sensor and zone |
+| Button *Start charging* | Start a session now, ignoring the cable sensor, location and charging hours |
 | Switch *Auto-start on plug-in* | Turn automatic starting on or off |
 | Sensor *Connector status* | OCPP status of your connector (e.g. `Available`, `Preparing`, `Charging`) |
 | Sensors *Session status / energy / cost* | The live session, when there is one |
 | Sensor *Start status* | What the last start attempt did, and why a plug-in was skipped (vehicle not at the charger, already charging, payment not completed, ...). The `detail` attribute has the specifics |
+
+## Time-of-use rates
+To charge only during cheaper hours, set **Only start charging from** and **until** in the settings (for example 21:00 and 06:00; a range across midnight is fine). Leave both empty to start as soon as you plug in.
+
+- Plug in outside those hours and *Start status* shows **Waiting for charging hours**. The start happens automatically at the first time, as long as the car is still plugged in at the charger.
+- Plug in during those hours and it starts straight away.
+- If payment is needed, the notification is sent when the start happens, not when you plug in. It contains the checkout link and a second **start link** that never expires: open it whenever you are ready and it starts a session and takes you to a fresh payment page.
+- The **Start charging** button ignores the hours. A session that has started is not stopped when the hours end; limit it with the target energy.
+
+### The start link
+The link looks like `https://your-home-assistant/api/scaleev/start/<long code>` and uses the address under Settings → System → Network, so set your external URL there if you want it to work away from home. It works without logging in to Home Assistant, which is what lets it open from an email: anyone who has the link can start a session on your charger, so treat it like a password. It changes when your ScaleEV password changes.
 
 ## Notifications
 The **Notify action** setting accepts any Home Assistant notify action or notify entity, not just the companion app:

@@ -108,3 +108,13 @@ async def test_zone_required_without_coordinates(hass, aioclient_mock):
     assert r["errors"] == {"charge_zone": "zone_required"}
     r = await hass.config_entries.flow.async_configure(r["flow_id"], {**base, "charge_zone": "zone.home"})
     assert r["type"] is FlowResultType.CREATE_ENTRY and r["data"]["location_latitude"] is None
+
+
+def test_charging_hours_need_both_times():
+    from custom_components.scaleev.config_flow import _settings_errors
+
+    assert _settings_errors({"window_start": "21:00:00"}, True) == {"window_end": "window_incomplete"}
+    assert _settings_errors({"window_end": "06:00:00"}, True) == {"window_start": "window_incomplete"}
+    assert _settings_errors({"window_start": "21:00:00", "window_end": "21:00:00"}, True) == {"window_end": "window_empty"}
+    assert _settings_errors({"window_start": "21:00:00", "window_end": "06:00:00"}, True) == {}
+    assert _settings_errors({}, True) == {}

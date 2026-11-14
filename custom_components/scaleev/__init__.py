@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import time
 
 from homeassistant.components.zone import in_zone
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +16,8 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
+from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance
 
 from .api import ScaleEVClient
@@ -32,12 +34,18 @@ from .const import (
     CONNECTOR_FREE,
     CONNECTOR_WAITING,
     DEFAULT_RADIUS,
+    DOMAIN,
     STATUS_AUTO_OFF,
     STATUS_AWAY,
+    STATUS_IDLE,
     CONF_TENANT_SLUG,
     CONF_VEHICLE_TRACKER,
+    CONF_WINDOW_END,
+    CONF_WINDOW_START,
+    STATUS_SCHEDULED,
 )
 from .coordinator import ScaleEVCoordinator
+from .http import StartLinkView
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
@@ -94,6 +102,20 @@ def _why_not_at_charger(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
     )
 
 
+def _charging_window(entry: ConfigEntry) -> tuple[time, time] | None:
+    """The hours automatic starts are allowed in, or None for any time."""
+    start = dt_util.parse_time(entry.options.get(CONF_WINDOW_START) or "")
+    end = dt_util.parse_time(entry.options.get(CONF_WINDOW_END) or "")
+    return (start, end) if start and end and start != end else None
+
+
+def _in_window(now: time, window: tuple[time, time]) -> bool:
+    start, end = window
+    if start < end:
+        return start <= now < end
+    return now >= start or now < end  # the window spans midnight
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> bool:
     client = ScaleEVClient(
         async_get_clientsession(hass),
@@ -107,6 +129,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
 
     manager = ChargeManager(hass, entry, client, coordinator)
     entry.runtime_data = manager
+    if not hass.data.get(DOMAIN):
+        hass.http.register_view(StartLinkView())
+        hass.data[DOMAIN] = True
 
     cable_id = entry.options[CONF_CABLE_SENSOR]
     tracker_id = entry.options[CONF_VEHICLE_TRACKER]
@@ -117,6 +142,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
     # One automatic attempt per plug-in. Cleared when the cable is seen off or
     # the charger reports the connector free again.
     attempted = False
+    # A plug-in seen outside the charging hours, waiting for them to begin.
+    waiting = False
+    window = _charging_window(entry)
     connector_was: str | None = None
 
     def _connector() -> str:
@@ -132,13 +160,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
         polled sensor never showed as a change, e.g. arriving straight from
         another charger with the sensor still on.
         """
-        nonlocal attempted
+        nonlocal attempted, waiting
         connector = _connector()
         if cable_was == STATE_OFF or connector == CONNECTOR_FREE:
             attempted = False
+            if waiting:
+                waiting = False
+                manager.async_set_status(STATUS_IDLE)
         if cable_was != STATE_ON or attempted or manager.running:
             return
-        if not (plugged_in_now or connector == CONNECTOR_WAITING):
+        if not (plugged_in_now or waiting or connector == CONNECTOR_WAITING):
             return
         if not manager.auto_start:
             manager.async_set_status(STATUS_AUTO_OFF)
@@ -146,6 +177,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
         if reason := _why_not_at_charger(hass, entry):
             manager.async_set_status(STATUS_AWAY, reason)
             return
+        if window and not _in_window(dt_util.now().time(), window):
+            waiting = True
+            manager.async_set_status(STATUS_SCHEDULED, f"Starts at {window[0].strftime('%H:%M')}")
+            return
+        waiting = False
         attempted = True
         manager.async_trigger(manual=False)
 
@@ -193,6 +229,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
     entry.async_on_unload(async_track_state_change_event(hass, [cable_id], _cable_changed))
     entry.async_on_unload(async_track_state_change_event(hass, [tracker_id], _tracker_changed))
     entry.async_on_unload(coordinator.async_add_listener(_polled))
+    if window:
+
+        @callback
+        def _window_opened(_now) -> None:
+            _evaluate()
+
+        entry.async_on_unload(
+            async_track_time_change(hass, _window_opened, hour=window[0].hour, minute=window[0].minute, second=0)
+        )
     entry.async_on_unload(entry.add_update_listener(_reload))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
