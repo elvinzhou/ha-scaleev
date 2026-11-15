@@ -49,7 +49,7 @@
           "window_end": "Only start charging until (optional)"
         },
         "data_description": {
-          "window_start": "For time-of-use rates. If you plug in outside these hours, the start waits until this time. Leave both empty to start as soon as you plug in.",
+          "window_start": "Usually not needed. Recommended instead: leave both empty, pay when you plug in, and set scheduled charging in the vehicle to the off-peak time. The session stays open and the vehicle draws power only from then on. Use these hours only if your vehicle can't delay charging; the start then waits until this time, and any payment is requested then.",
           "window_end": "A session that has started keeps running past this time."
         }
       },
@@ -96,7 +96,7 @@
         },
         "description": "Set the target energy to your vehicle's usable battery capacity so the session isn't cut short. Charging starts when the cable sensor turns on while the vehicle is within the radius of the charging location. Pick a zone only if you want to define the area yourself, or if your tracker has no GPS position.",
         "data_description": {
-          "window_start": "For time-of-use rates. If you plug in outside these hours, the start waits until this time. Leave both empty to start as soon as you plug in.",
+          "window_start": "Usually not needed. Recommended instead: leave both empty, pay when you plug in, and set scheduled charging in the vehicle to the off-peak time. The session stays open and the vehicle draws power only from then on. Use these hours only if your vehicle can't delay charging; the start then waits until this time, and any payment is requested then.",
           "window_end": "A session that has started keeps running past this time."
         }
       }
