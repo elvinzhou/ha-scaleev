@@ -57,3 +57,21 @@ STATUSES = [
 ]
 
 NOTIFICATION_TAG = "scaleev_pay"
+
+# Outcomes worth a warning in the Home Assistant log, and how they read there.
+LOGGED_STATUSES = (
+    STATUS_AUTO_OFF, STATUS_AWAY, STATUS_ALREADY_CHARGING, STATUS_PAYMENT_TIMEOUT, STATUS_NOT_CONFIRMED, STATUS_FAILED,
+)
+STATUS_LOG_TEXT = {
+    STATUS_IDLE: "waiting for plug-in",
+    STATUS_AUTO_OFF: "plug-in skipped, auto-start is off",
+    STATUS_AWAY: "plug-in skipped, vehicle not at the charger",
+    STATUS_SCHEDULED: "plug-in seen, waiting for charging hours",
+    STATUS_ALREADY_CHARGING: "start skipped, a session is already active",
+    STATUS_STARTING: "starting a session",
+    STATUS_AWAITING_PAYMENT: "waiting for payment",
+    STATUS_STARTED: "charging started",
+    STATUS_PAYMENT_TIMEOUT: "charging did not start, payment was not completed",
+    STATUS_NOT_CONFIRMED: "charging did not start, the session could not be confirmed",
+    STATUS_FAILED: "could not start charging",
+}

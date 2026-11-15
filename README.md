@@ -33,10 +33,13 @@ Change any of the settings later with the integration's **Configure** button. Ad
 | Switch *Auto-start on plug-in* | Turn automatic starting on or off |
 | Sensor *Connector status* | OCPP status of your connector (e.g. `Available`, `Preparing`, `Charging`) |
 | Sensors *Session status / energy / cost* | The live session, when there is one |
-| Sensor *Start status* | What the last start attempt did, and why a plug-in was skipped (vehicle not at the charger, already charging, payment not completed, ...). The `detail` attribute has the specifics |
+| Sensor *Start status* | What the last start attempt did, and why a plug-in was skipped (vehicle not at the charger, already charging, waiting for charging hours, payment not completed, ...) |
+| Sensor *Start detail* | The specifics behind *Start status*: for example the vehicle's position, its distance from the charger and the radius |
 
 ## Time-of-use rates
-To charge only during cheaper hours, set **Only start charging from** and **until** in the settings (for example 21:00 and 06:00; a range across midnight is fine). Leave both empty to start as soon as you plug in.
+**Recommended: let the vehicle do the waiting.** Leave the charging hours empty, so the session starts and you pay as soon as you plug in, and set scheduled charging in the vehicle (for a Tesla, *Schedule* on the charging screen) to the off-peak time. The session stays open and the vehicle only draws power from then on. This has been confirmed to work on a network without idle fees; check your network's idle fee before relying on it.
+
+**If your vehicle can't delay charging,** set **Only start charging from** and **until** in the settings (for example 21:00 and 06:00; a range across midnight is fine):
 
 - Plug in outside those hours and *Start status* shows **Waiting for charging hours**. The start happens automatically at the first time, as long as the car is still plugged in at the charger.
 - Plug in during those hours and it starts straight away.
@@ -54,7 +57,7 @@ The **Notify action** setting accepts any Home Assistant notify action or notify
 - If the action can't be found or fails, the message appears in Home Assistant's own notifications (the bell icon) with a **Pay now** link.
 
 ## Troubleshooting
-If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped, with the numbers in its `detail` attribute.
+If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped, and **Start detail** gives the numbers behind it. Skipped and failed starts are also written to the Home Assistant log (Settings → System → Logs) as warnings from `custom_components.scaleev`, with the same reason.
 
 A plug-in is seen in either of two ways, and each plug-in gets one automatic attempt:
 

@@ -28,10 +28,12 @@ from .const import (
     NOTIFICATION_TAG,
     PAID_STATUSES,
     POLL_SECONDS,
+    LOGGED_STATUSES,
     STATUS_ALREADY_CHARGING,
     STATUS_AWAITING_PAYMENT,
     STATUS_FAILED,
     STATUS_IDLE,
+    STATUS_LOG_TEXT,
     STATUS_NOT_CONFIRMED,
     STATUS_PAYMENT_TIMEOUT,
     STATUS_STARTED,
@@ -93,7 +95,10 @@ class ChargeManager:
             return
         self.status = status
         self.status_detail = detail
-        _LOGGER.info("ScaleEV start status: %s%s", status, f" ({detail})" if detail else "")
+        # Skips and failures go to the log at warning level so they show up in
+        # Settings > System > Logs without any logger configuration.
+        level = logging.WARNING if status in LOGGED_STATUSES else logging.INFO
+        _LOGGER.log(level, "%s: %s%s", self._name, STATUS_LOG_TEXT.get(status, status), f": {detail}" if detail else "")
         for listener in list(self._status_listeners):
             listener()
 

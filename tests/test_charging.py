@@ -381,6 +381,7 @@ async def test_away_detail_gives_distance_and_radius(hass, aioclient_mock):
     await _plug_in(hass, entry)
     detail = hass.states.get("sensor.cdn31_start_status").attributes["detail"]
     assert "111 m from the charging location" in detail and "radius 50 m" in detail
+    assert hass.states.get("sensor.cdn31_start_detail").state == detail
 
 
 async def test_away_detail_says_when_tracker_has_no_gps(hass, aioclient_mock):
@@ -395,3 +396,12 @@ async def test_zone_without_gps_matches_state(hass, aioclient_mock):
     entry, notify = await _setup(hass, aioclient_mock, gps=False, charge_zone="zone.home")
     await _plug_in(hass, entry)
     assert notify[0].data["title"] == "ScaleEV: payment needed"
+
+
+async def test_skips_are_logged_as_warnings(hass, aioclient_mock, caplog):
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, _ = await _setup(hass, aioclient_mock, at_home=False)
+    await _plug_in(hass, entry)
+    record = next(r for r in caplog.records if r.name == "custom_components.scaleev.charging" and r.levelname == "WARNING")
+    assert "CDN31: plug-in skipped, vehicle not at the charger: device_tracker.car is at" in record.getMessage()
+    assert "m from the charging location" in record.getMessage()

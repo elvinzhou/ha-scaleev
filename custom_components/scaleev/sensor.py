@@ -13,7 +13,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(
         [ConnectorStatus(m, "connector_status"), SessionStatus(m, "session_status"),
          SessionEnergy(m, "session_energy"), SessionCost(m, "session_cost"),
-         StartStatus(m, "start_status")]
+         StartStatus(m, "start_status"), StartDetail(m, "start_detail")]
     )
 
 
@@ -73,3 +73,14 @@ class StartStatus(ScaleEVEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return {"detail": self.manager.status_detail}
+
+
+class StartDetail(ScaleEVEntity, SensorEntity):
+    """The reason behind Start status, as a state so it shows on the device page and in Activity."""
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(self.manager.async_add_status_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self):
+        return (self.manager.status_detail or "")[:255] or None
