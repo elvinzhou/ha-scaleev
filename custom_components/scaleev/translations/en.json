@@ -146,6 +146,9 @@
           "failed": "Failed",
           "scheduled": "Waiting for charging hours"
         }
+      },
+      "start_detail": {
+        "name": "Start detail"
       }
     }
   }

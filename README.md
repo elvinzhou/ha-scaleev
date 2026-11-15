@@ -33,7 +33,8 @@ Change any of the settings later with the integration's **Configure** button. Ad
 | Switch *Auto-start on plug-in* | Turn automatic starting on or off |
 | Sensor *Connector status* | OCPP status of your connector (e.g. `Available`, `Preparing`, `Charging`) |
 | Sensors *Session status / energy / cost* | The live session, when there is one |
-| Sensor *Start status* | What the last start attempt did, and why a plug-in was skipped (vehicle not at the charger, already charging, payment not completed, ...). The `detail` attribute has the specifics |
+| Sensor *Start status* | What the last start attempt did, and why a plug-in was skipped (vehicle not at the charger, already charging, waiting for charging hours, payment not completed, ...) |
+| Sensor *Start detail* | The specifics behind *Start status*: for example the vehicle's position, its distance from the charger and the radius |
 
 ## Time-of-use rates
 To charge only during cheaper hours, set **Only start charging from** and **until** in the settings (for example 21:00 and 06:00; a range across midnight is fine). Leave both empty to start as soon as you plug in.
@@ -54,7 +55,7 @@ The **Notify action** setting accepts any Home Assistant notify action or notify
 - If the action can't be found or fails, the message appears in Home Assistant's own notifications (the bell icon) with a **Pay now** link.
 
 ## Troubleshooting
-If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped, with the numbers in its `detail` attribute.
+If plugging in does nothing, look at the **Start status** sensor first: it says whether the plug-in was seen and why it was skipped, and **Start detail** gives the numbers behind it.
 
 A plug-in is seen in either of two ways, and each plug-in gets one automatic attempt:
 

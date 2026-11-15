@@ -381,6 +381,7 @@ async def test_away_detail_gives_distance_and_radius(hass, aioclient_mock):
     await _plug_in(hass, entry)
     detail = hass.states.get("sensor.cdn31_start_status").attributes["detail"]
     assert "111 m from the charging location" in detail and "radius 50 m" in detail
+    assert hass.states.get("sensor.cdn31_start_detail").state == detail
 
 
 async def test_away_detail_says_when_tracker_has_no_gps(hass, aioclient_mock):
