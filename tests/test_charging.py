@@ -432,3 +432,30 @@ async def test_no_verdict_while_home_assistant_is_starting(hass, aioclient_mock)
     await entry.runtime_data._task
     assert len(_starts(aioclient_mock)) == 1
     assert hass.states.get("sensor.cdn31_start_status").state == "started"
+
+
+async def test_smtp_email_gets_html(hass, aioclient_mock):
+    """An action from the SMTP integration gets a formatted HTML body next to the plain text."""
+    from types import SimpleNamespace
+
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    email = async_mock_service(hass, "notify", "email_me")
+    hass.data["notify_services"] = {"smtp": [SimpleNamespace(_service_name="email_me")]}
+    entry, _ = await _setup(hass, aioclient_mock, notify_service="notify.email_me")
+    await _plug_in(hass, entry)
+    pay, started = email[0].data, email[1].data
+    assert "https://checkout.example/pay" in pay["message"]  # plain-text alternative is kept
+    html = pay["data"]["html"]
+    assert html.startswith("<!doctype html>") and "Payment needed" in html and "Action needed" in html
+    assert '<a href="https://checkout.example/pay"' in html and ">Pay now</a>" in html
+    assert "CDN31" in html and "60 kWh" in html
+    assert "/api/scaleev/start/" in html
+    assert "Charging started" in started["data"]["html"] and "#188038" in started["data"]["html"]
+
+
+def test_email_escapes_text():
+    from custom_components.scaleev.mail import render
+
+    html = render("ScaleEV: could not start charging", "<b>bad</b> & worse", links=[("Go", "https://x.test/?a=1&b=\"2")])
+    assert "<b>bad</b>" not in html and "&lt;b&gt;bad&lt;/b&gt; &amp; worse" in html
+    assert 'href="https://x.test/?a=1&amp;b=&quot;2"' in html

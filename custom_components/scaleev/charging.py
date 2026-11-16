@@ -41,6 +41,7 @@ from .const import (
     UNPAID_STATUS,
 )
 from .coordinator import ScaleEVCoordinator
+from .mail import render as render_email
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -151,7 +152,12 @@ class ChargeManager:
         elif current:
             self.async_set_status(STATUS_ALREADY_CHARGING, f"Session is {current.get('status', 'active')}")
             if manual:
-                await self._notify("ScaleEV: already charging", f"A session is already in progress at {self._name}.")
+                await self._notify(
+                    "ScaleEV: already charging",
+                    f"A session is already in progress at {self._name}.",
+                    tone="info",
+                    facts=[("Session", str(current.get("status", "active")))],
+                )
             return
 
         result = await self.client.async_remote_start(
@@ -172,7 +178,12 @@ class ChargeManager:
         await self.coordinator.async_request_refresh()
         if live:
             self.async_set_status(STATUS_STARTED)
-            await self._notify("ScaleEV: charging started", f"{self._name} is {live.get('status', 'started')} ({target} kWh target).")
+            await self._notify(
+                "ScaleEV: charging started",
+                f"{self._name} is {live.get('status', 'started')} ({target} kWh target).",
+                tone="ok",
+                facts=[("Target", f"{target} kWh")],
+            )
         elif needs_payment:
             self.async_set_status(STATUS_PAYMENT_TIMEOUT)
             again = self.start_link
@@ -217,7 +228,22 @@ class ChargeManager:
                 + ([{"action": "URI", "title": "New payment link", "uri": again}] if again else []),
             },
             links=links,
+            tone="action",
+            facts=[
+                ("Target", f"{target} kWh"),
+                ("Pay within", f"{int(self.entry.options.get(CONF_PAY_TIMEOUT, DEFAULT_PAY_TIMEOUT))} minutes"),
+            ],
         )
+
+    def _is_email(self, service: str) -> bool:
+        """True if this notify action belongs to Home Assistant's SMTP integration, which accepts HTML."""
+        try:
+            return any(
+                getattr(svc, "_service_name", None) == service
+                for svc in self.hass.data.get("notify_services", {}).get("smtp", [])
+            )
+        except Exception:  # noqa: BLE001 - relies on notify internals; plain text is a fine fallback
+            return False
 
     async def _notify(
         self,
@@ -226,6 +252,8 @@ class ChargeManager:
         data: dict | None = None,
         clear: bool = False,
         links: list[tuple[str, str]] | None = None,
+        tone: str = "problem",
+        facts: list[tuple[str, str]] | None = None,
     ) -> None:
         """Send through the configured notify action or entity, else a persistent notification.
 
@@ -248,6 +276,12 @@ class ChargeManager:
                     payload["title"] = title
                     if data and mobile:
                         payload["data"] = data
+                    elif self._is_email(service):
+                        payload["data"] = {
+                            "html": render_email(
+                                title, message, tone=tone, facts=[("Station", self._name), *(facts or [])], links=links
+                            )
+                        }
                 await self.hass.services.async_call("notify", service, payload, blocking=True)
                 return
             if target.startswith("notify.") and self.hass.states.get(target) is not None:
