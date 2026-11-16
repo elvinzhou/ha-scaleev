@@ -14,8 +14,9 @@ from homeassistant.const import (
     STATE_ON,
     Platform,
 )
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.core import CoreState, Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
 from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance
@@ -63,7 +64,7 @@ def _why_not_at_charger(hass: HomeAssistant, entry: ConfigEntry) -> str | None:
     tracker_id = opts[CONF_VEHICLE_TRACKER]
     tracker = hass.states.get(tracker_id)
     if tracker is None:
-        return f"{tracker_id} does not exist"
+        return f"{tracker_id} does not exist; pick the vehicle tracker again in the settings"
     t_lat = tracker.attributes.get(ATTR_LATITUDE)
     t_lon = tracker.attributes.get(ATTR_LONGITUDE)
     has_gps = t_lat is not None and t_lon is not None
@@ -161,6 +162,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
         another charger with the sensor still on.
         """
         nonlocal attempted, waiting
+        if hass.state is not CoreState.running:
+            # Home Assistant is still starting: the vehicle's integration may not
+            # have created its entities yet, so the car's position can't be judged.
+            # async_at_started below runs this again once everything is loaded.
+            return
         connector = _connector()
         if cable_was == STATE_OFF or connector == CONNECTOR_FREE:
             attempted = False
@@ -225,6 +231,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ScaleEVConfigEntry) -> b
             entry.async_create_background_task(hass, _refresh_vehicle(), name="scaleev refresh vehicle")
         _evaluate()
 
+    @callback
+    def _started(_hass: HomeAssistant) -> None:
+        _evaluate()
+
+    entry.async_on_unload(async_at_started(hass, _started))
     connector_was = _connector()
     entry.async_on_unload(async_track_state_change_event(hass, [cable_id], _cable_changed))
     entry.async_on_unload(async_track_state_change_event(hass, [tracker_id], _tracker_changed))

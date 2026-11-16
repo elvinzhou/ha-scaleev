@@ -405,3 +405,30 @@ async def test_skips_are_logged_as_warnings(hass, aioclient_mock, caplog):
     record = next(r for r in caplog.records if r.name == "custom_components.scaleev.charging" and r.levelname == "WARNING")
     assert "CDN31: plug-in skipped, vehicle not at the charger: device_tracker.car is at" in record.getMessage()
     assert "m from the charging location" in record.getMessage()
+
+
+async def test_no_verdict_while_home_assistant_is_starting(hass, aioclient_mock):
+    """During startup the car's entities may not exist yet; wait instead of calling it away."""
+    from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+    from homeassistant.core import CoreState
+
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    notify = async_mock_service(hass, "notify", "mobile_app_pat")
+    hass.set_state(CoreState.not_running)
+    entry = make_entry(hass)  # set up before the vehicle's integration: no tracker, no cable sensor
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await _poll(hass, aioclient_mock, entry, "Preparing", start=PENDING_START, live_session=LIVE_AUTH)
+    assert hass.states.get("sensor.cdn31_start_status").state == "idle"
+
+    set_world(hass)  # the vehicle's integration loads; the car is at the charger, plugged in
+    hass.states.async_set("binary_sensor.car_cable", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.cdn31_start_status").state == "idle" and not _starts(aioclient_mock)
+
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    await entry.runtime_data._task
+    assert len(_starts(aioclient_mock)) == 1
+    assert hass.states.get("sensor.cdn31_start_status").state == "started"
