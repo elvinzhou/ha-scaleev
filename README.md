@@ -53,7 +53,7 @@ The link looks like `https://your-home-assistant/api/scaleev/start/<long code>` 
 The **Notify action** setting accepts any Home Assistant notify action or notify entity, not just the companion app:
 
 - **Companion app** (`notify.mobile_app_...`): a push notification with a **Pay now** button.
-- **Anything else**, such as email ([SMTP](https://www.home-assistant.io/integrations/smtp/)), Telegram, ntfy, Pushover or Signal: a plain message with the checkout link in the text. Set that integration up in Home Assistant first, then pick it here.
+- **Anything else**, such as email ([SMTP](https://www.home-assistant.io/integrations/smtp/)), Telegram, ntfy, Pushover or Signal: a plain message with the checkout link in the text. Email sent through the SMTP integration is formatted (HTML, with a **Pay now** button) and includes a plain-text version. Set that integration up in Home Assistant first, then pick it here.
 - If the action can't be found or fails, the message appears in Home Assistant's own notifications (the bell icon) with a **Pay now** link.
 
 ## Troubleshooting
