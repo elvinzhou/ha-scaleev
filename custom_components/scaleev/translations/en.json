@@ -46,11 +46,13 @@
           "pay_timeout": "Payment timeout",
           "radius": "Radius around the location",
           "window_start": "Only start charging from (optional)",
-          "window_end": "Only start charging until (optional)"
+          "window_end": "Only start charging until (optional)",
+          "wake_button": "Vehicle wake button (optional)"
         },
         "data_description": {
           "window_start": "Usually not needed. Recommended instead: leave both empty, pay when you plug in, and set scheduled charging in the vehicle to the off-peak time. The session stays open and the vehicle draws power only from then on. Use these hours only if your vehicle can't delay charging; the start then waits until this time, and any payment is requested then.",
-          "window_end": "A session that has started keeps running past this time."
+          "window_end": "A session that has started keeps running past this time.",
+          "wake_button": "For vehicles whose integration doesn't update while the car sleeps, such as Tesla Fleet (its Wake button). Pressed when the charger reports a plug-in, so the car's location and cable status update within a minute instead of at the next poll. Waking the car may count against your vehicle API usage."
         }
       },
       "reauth_confirm": {
@@ -92,12 +94,14 @@
           "pay_timeout": "Payment timeout",
           "radius": "Radius around the location",
           "window_start": "Only start charging from (optional)",
-          "window_end": "Only start charging until (optional)"
+          "window_end": "Only start charging until (optional)",
+          "wake_button": "Vehicle wake button (optional)"
         },
         "description": "Set the target energy to your vehicle's usable battery capacity so the session isn't cut short. Charging starts when the cable sensor turns on while the vehicle is within the radius of the charging location. Pick a zone only if you want to define the area yourself, or if your tracker has no GPS position.",
         "data_description": {
           "window_start": "Usually not needed. Recommended instead: leave both empty, pay when you plug in, and set scheduled charging in the vehicle to the off-peak time. The session stays open and the vehicle draws power only from then on. Use these hours only if your vehicle can't delay charging; the start then waits until this time, and any payment is requested then.",
-          "window_end": "A session that has started keeps running past this time."
+          "window_end": "A session that has started keeps running past this time.",
+          "wake_button": "For vehicles whose integration doesn't update while the car sleeps, such as Tesla Fleet (its Wake button). Pressed when the charger reports a plug-in, so the car's location and cable status update within a minute instead of at the next poll. Waking the car may count against your vehicle API usage."
         }
       }
     },
@@ -144,7 +148,8 @@
           "payment_timeout": "Payment not completed",
           "not_confirmed": "Start not confirmed",
           "failed": "Failed",
-          "scheduled": "Waiting for charging hours"
+          "scheduled": "Waiting for charging hours",
+          "locating": "Waiting for vehicle location"
         }
       },
       "start_detail": {
