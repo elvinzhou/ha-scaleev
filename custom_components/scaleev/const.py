@@ -28,6 +28,7 @@ CONF_PAY_TIMEOUT = "pay_timeout"
 CONF_RADIUS = "radius"
 CONF_WINDOW_START = "window_start"
 CONF_WINDOW_END = "window_end"
+CONF_WAKE_BUTTON = "wake_button"
 
 DEFAULT_PAY_TIMEOUT = 10  # minutes
 DEFAULT_RADIUS = 150  # metres around the location's coordinates
@@ -44,6 +45,7 @@ STATUS_IDLE = "idle"
 STATUS_AUTO_OFF = "auto_start_off"
 STATUS_AWAY = "away"
 STATUS_SCHEDULED = "scheduled"
+STATUS_LOCATING = "locating"
 STATUS_ALREADY_CHARGING = "already_charging"
 STATUS_STARTING = "starting"
 STATUS_AWAITING_PAYMENT = "awaiting_payment"
@@ -52,7 +54,7 @@ STATUS_PAYMENT_TIMEOUT = "payment_timeout"
 STATUS_NOT_CONFIRMED = "not_confirmed"
 STATUS_FAILED = "failed"
 STATUSES = [
-    STATUS_IDLE, STATUS_AUTO_OFF, STATUS_AWAY, STATUS_SCHEDULED, STATUS_ALREADY_CHARGING, STATUS_STARTING,
+    STATUS_IDLE, STATUS_AUTO_OFF, STATUS_AWAY, STATUS_LOCATING, STATUS_SCHEDULED, STATUS_ALREADY_CHARGING, STATUS_STARTING,
     STATUS_AWAITING_PAYMENT, STATUS_STARTED, STATUS_PAYMENT_TIMEOUT, STATUS_NOT_CONFIRMED, STATUS_FAILED,
 ]
 
@@ -67,6 +69,7 @@ STATUS_LOG_TEXT = {
     STATUS_AUTO_OFF: "plug-in skipped, auto-start is off",
     STATUS_AWAY: "plug-in skipped, vehicle not at the charger",
     STATUS_SCHEDULED: "plug-in seen, waiting for charging hours",
+    STATUS_LOCATING: "plug-in seen, waiting for an up-to-date vehicle location",
     STATUS_ALREADY_CHARGING: "start skipped, a session is already active",
     STATUS_STARTING: "starting a session",
     STATUS_AWAITING_PAYMENT: "waiting for payment",
@@ -75,3 +78,7 @@ STATUS_LOG_TEXT = {
     STATUS_NOT_CONFIRMED: "charging did not start, the session could not be confirmed",
     STATUS_FAILED: "could not start charging",
 }
+
+# How long to wait for the vehicle's tracker to report after a plug-in before
+# judging its position with whatever it last reported.
+LOCATION_WAIT_MINUTES = 20

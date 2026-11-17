@@ -1,4 +1,5 @@
 import pytest
+from homeassistant.core import callback
 from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant_custom_component.common import async_mock_service
 
@@ -168,6 +169,13 @@ async def test_bad_password_triggers_reauth(hass, aioclient_mock):
     assert any(f["context"]["source"] == "reauth" for f in hass.config_entries.flow.async_progress())
 
 
+async def _report_tracker(hass):
+    """The vehicle's integration polls again: the tracker re-reports its position."""
+    state = hass.states.get("device_tracker.car")
+    hass.states.async_set("device_tracker.car", state.state, dict(state.attributes))
+    await hass.async_block_till_done()
+
+
 def _starts(mock):
     return [c for c in mock.mock_calls if c[0] == "POST" and "remote-start" in str(c[1])]
 
@@ -226,6 +234,7 @@ async def test_plug_in_the_cable_sensor_never_showed(hass, aioclient_mock):
     mock_api(aioclient_mock, connector="Available", **api)
     entry, notify = await _setup(hass, aioclient_mock, at_home=False)
     await _plug_in(hass, entry)  # plugged in at a supercharger
+    await _report_tracker(hass)
     assert hass.states.get("sensor.cdn31_start_status").state == "away"
     # Home again; the car's sensor missed the unplug, so it never changes.
     hass.states.async_set("device_tracker.car", "home",
@@ -295,6 +304,7 @@ async def test_start_status_explains_skips(hass, aioclient_mock):
     status = "sensor.cdn31_start_status"
     assert hass.states.get(status).state == "idle"
     await _plug_in(hass, entry)
+    await _report_tracker(hass)
     assert hass.states.get(status).state == "away"
     assert "device_tracker.car" in hass.states.get(status).attributes["detail"]
     set_world(hass)
@@ -379,6 +389,7 @@ async def test_away_detail_gives_distance_and_radius(hass, aioclient_mock):
     hass.states.async_set("device_tracker.car", "home",
                           {"latitude": hass.config.latitude + 0.001, "longitude": hass.config.longitude, "gps_accuracy": 0})
     await _plug_in(hass, entry)
+    await _report_tracker(hass)
     detail = hass.states.get("sensor.cdn31_start_status").attributes["detail"]
     assert "111 m from the charging location" in detail and "radius 50 m" in detail
     assert hass.states.get("sensor.cdn31_start_detail").state == detail
@@ -388,6 +399,7 @@ async def test_away_detail_says_when_tracker_has_no_gps(hass, aioclient_mock):
     mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
     entry, _ = await _setup(hass, aioclient_mock, gps=False)
     await _plug_in(hass, entry)
+    await _report_tracker(hass)
     assert "has no GPS position" in hass.states.get("sensor.cdn31_start_status").attributes["detail"]
 
 
@@ -402,6 +414,7 @@ async def test_skips_are_logged_as_warnings(hass, aioclient_mock, caplog):
     mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
     entry, _ = await _setup(hass, aioclient_mock, at_home=False)
     await _plug_in(hass, entry)
+    await _report_tracker(hass)
     record = next(r for r in caplog.records if r.name == "custom_components.scaleev.charging" and r.levelname == "WARNING")
     assert "CDN31: plug-in skipped, vehicle not at the charger: device_tracker.car is at" in record.getMessage()
     assert "m from the charging location" in record.getMessage()
@@ -459,3 +472,74 @@ def test_email_escapes_text():
     html = render("ScaleEV: could not start charging", "<b>bad</b> & worse", links=[("Go", "https://x.test/?a=1&b=\"2")])
     assert "<b>bad</b>" not in html and "&lt;b&gt;bad&lt;/b&gt; &amp; worse" in html
     assert 'href="https://x.test/?a=1&amp;b=&quot;2"' in html
+
+
+async def test_tracker_updating_just_after_the_cable_is_not_away(hass, aioclient_mock, caplog):
+    """One vehicle poll updates the cable sensor a moment before the tracker: wait for the tracker."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, at_home=False)  # tracker still shows the drive home
+    await _plug_in(hass, entry)
+    state = hass.states.get("sensor.cdn31_start_status")
+    assert state.state == "locating" and "before the plug-in" in state.attributes["detail"]
+    assert not [r for r in caplog.records if r.levelname == "WARNING" and "scaleev" in r.name]
+    hass.states.async_set("device_tracker.car", "home",
+                          {"latitude": hass.config.latitude, "longitude": hass.config.longitude, "gps_accuracy": 5})
+    await hass.async_block_till_done()
+    await entry.runtime_data._task
+    assert len(_starts(aioclient_mock)) == 1
+    assert hass.states.get("sensor.cdn31_start_status").state == "started"
+
+
+async def test_unchanged_report_counts_as_up_to_date(hass, aioclient_mock):
+    """A re-report of the same far position (no state change) settles it as away."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, at_home=False)
+    await _plug_in(hass, entry)
+    assert hass.states.get("sensor.cdn31_start_status").state == "locating"
+    await _report_tracker(hass)
+    assert hass.states.get("sensor.cdn31_start_status").state == "away"
+    assert not _starts(aioclient_mock)
+
+
+async def test_stale_location_is_judged_after_the_wait(hass, aioclient_mock, freezer):
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH)
+    entry, notify = await _setup(hass, aioclient_mock, at_home=False)
+    freezer.tick(60)  # the car's last poll was a minute before the plug-in
+    await _plug_in(hass, entry)
+    assert hass.states.get("sensor.cdn31_start_status").state == "locating"
+    freezer.tick(19 * 60)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.cdn31_start_status").state == "locating"
+    freezer.tick(2 * 60)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    state = hass.states.get("sensor.cdn31_start_status")
+    assert state.state == "away" and "m from the charging location" in state.attributes["detail"]
+
+
+async def test_wake_button_pressed_when_charger_reports_plug_in(hass, aioclient_mock):
+    mock_api(aioclient_mock, connector="Available")
+    entry, _ = await _setup(hass, aioclient_mock, wake_button="button.car_wake")
+    calls = []
+    # Registered after setup so they replace Home Assistant's own services.
+    hass.services.async_register("button", "press", callback(lambda call: calls.append(("wake", call.data["entity_id"]))))
+    hass.services.async_register("homeassistant", "update_entity",
+                                 callback(lambda call: calls.append(("refresh", call.data["entity_id"]))))
+    await _poll(hass, aioclient_mock, entry, "Preparing")
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert calls == [("wake", "button.car_wake"), ("refresh", ["binary_sensor.car_cable", "device_tracker.car"])]
+
+
+async def test_plug_in_elsewhere_resolves_without_our_connector(hass, aioclient_mock):
+    """At another charger our connector stays Available; a fresh tracker report still settles it."""
+    mock_api(aioclient_mock, start=PENDING_START, live_session=LIVE_AUTH, connector="Available")
+    entry, notify = await _setup(hass, aioclient_mock, at_home=False)
+    await _plug_in(hass, entry)
+    assert hass.states.get("sensor.cdn31_start_status").state == "locating"
+    await _poll(hass, aioclient_mock, entry, "Available")
+    assert hass.states.get("sensor.cdn31_start_status").state == "locating"
+    await _report_tracker(hass)
+    assert hass.states.get("sensor.cdn31_start_status").state == "away"

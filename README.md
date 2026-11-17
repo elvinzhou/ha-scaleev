@@ -64,7 +64,9 @@ A plug-in is seen in either of two ways, and each plug-in gets one automatic att
 - the cable sensor changes from `off` to `on`; or
 - the cable sensor is `on` and **Connector status** is `Preparing` (the charger itself reports a car connected and waiting). This covers vehicle integrations that poll slowly and never show the change, for example when you arrive straight from another charger.
 
-Both depend on polling, so allow a few minutes: ScaleEV is checked every 2 minutes, and your vehicle's integration on its own schedule. When the charger reports a plug-in, the integration asks Home Assistant to refresh the cable sensor and tracker straight away. The **Start charging** button always works immediately.
+Both depend on polling. ScaleEV is checked every 2 minutes; your vehicle's integration polls on its own schedule, and some don't poll a sleeping car at all (Tesla Fleet polls every 10 minutes and skips a sleeping car). If the vehicle's last reported position is from before the plug-in, *Start status* shows **Waiting for vehicle location** and the start goes ahead as soon as the tracker reports again; after 20 minutes without a report the old position is used. When the charger reports a plug-in, the integration asks Home Assistant to refresh the cable sensor and tracker straight away.
+
+**Vehicle wake button (Tesla Fleet and similar):** a refresh can't update a sleeping car. Pick the car's **Wake** button in the settings and it is pressed when the charger reports a plug-in, so the location and cable status arrive within a minute or so. Waking the car may count against your vehicle API usage. The **Start charging** button always works immediately.
 
 ## Limitations
 - **Cards can't be linked through the API.** The first session needs a one-time Stripe checkout (the **Pay now** notification). Whether a second session skips checkout depends on ScaleEV; please open an issue if it doesn't for you.

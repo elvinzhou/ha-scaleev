@@ -47,6 +47,7 @@ from .const import (
     CONF_TARGET_KWH,
     CONF_TENANT_SLUG,
     CONF_VEHICLE_TRACKER,
+    CONF_WAKE_BUTTON,
     CONF_WINDOW_END,
     CONF_WINDOW_START,
     DEFAULT_PAY_TIMEOUT,
@@ -74,6 +75,7 @@ def _settings_schema(hass) -> vol.Schema:
                 NumberSelectorConfig(min=25, max=2000, step=25, unit_of_measurement="m", mode=NumberSelectorMode.BOX)
             ),
             vol.Optional(CONF_CHARGE_ZONE): EntitySelector(EntitySelectorConfig(domain="zone")),
+            vol.Optional(CONF_WAKE_BUTTON): EntitySelector(EntitySelectorConfig(domain="button")),
             vol.Required(CONF_NOTIFY_SERVICE): SelectSelector(
                 SelectSelectorConfig(options=services, custom_value=True, mode=SelectSelectorMode.DROPDOWN)
             ),
